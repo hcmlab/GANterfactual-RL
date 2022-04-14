@@ -9,11 +9,11 @@ from tensorflow import keras
 
 from src.atari_wrapper import AtariWrapper
 from src.dataset_evaluation import get_uniques
-from src.util import array_to_pil_format
+from src.util import array_to_pil_format, load_baselines_model
 
 
-def create_dataset(env_name, size, target_path, agent, seed=None, noop_range=(0, 30),
-                   epsilon=0.0, power_pill_objective=False, domains=None):
+def create_dataset(env_name, size, target_path, agent, agent_type="deepq", seed=None, noop_range=(0, 30),
+                   epsilon=0.0, power_pill_objective=False, domains=None, deepq_preprocessing = True):
     """
     Creates a data set with the following structure. A directory is created at target_path with the subdirectories
     'train' and 'test'. Each of these has a subdirectory for every domain. The domain directories contain the generated
@@ -22,7 +22,9 @@ def create_dataset(env_name, size, target_path, agent, seed=None, noop_range=(0,
     :param env_name: Name of the gym environment to generate a data set for.
     :param size: The total amount of samples that should be generated.
     :param target_path: The path at which the data set should be saved.
-    :param agent: The agent that should be used to classify samples (Keras and Pytorch are supported).
+    :param agent: The agent that should be used to classify samples.
+    :param agent: The type of agent. "deepq" for Keras DeepQ or "acer" for gym.baselines ACER.
+        For Space Invader, a pytorch agent is expected and this flag is not used.  (Keras DeepQ, Pytorch and Baselines ACER are supported).
     :param seed: Seed for random number generator.
     :param noop_range: Range (min, max) of NOOPs that are executed at the beginning of an episode to generate a random
         offset.
@@ -38,7 +40,7 @@ def create_dataset(env_name, size, target_path, agent, seed=None, noop_range=(0,
         np.random.seed(seed)
 
     # init environment
-    wrapper = AtariWrapper(env_name, power_pill_objective=power_pill_objective)
+    wrapper = AtariWrapper(env_name, power_pill_objective=power_pill_objective, deepq_preprocessing=deepq_preprocessing)
 
     # create domains and folder structure
     if domains is None:
@@ -49,7 +51,7 @@ def create_dataset(env_name, size, target_path, agent, seed=None, noop_range=(0,
 
     # generate train and test set
     print("Generating dataset...")
-    _generate_set(size, train_path, wrapper, agent, domains, noop_range, epsilon)
+    _generate_set(size, train_path, wrapper, agent, agent_type, domains, noop_range, epsilon)
 
 
 def split_dataset(dataset_path, test_portion, domains):
@@ -198,7 +200,7 @@ def create_clean_test_set(dataset_path, samples_per_domain):
         print(f"Finished Domain {domain}.")
 
 
-def _generate_set(size, path, env_wrapper, agent, domains, noop_range, epsilon):
+def _generate_set(size, path, env_wrapper, agent, agent_type, domains, noop_range, epsilon):
     stacked_frames = env_wrapper.reset(noop_min=noop_range[0], noop_max=noop_range[1])
     # not using a for loop because the step counter should only be increased
     # if the frame is actually saved as a training sample
@@ -221,15 +223,22 @@ def _generate_set(size, path, env_wrapper, agent, domains, noop_range, epsilon):
                 # random exploration to increase state diversity (frame must not be saved as a training sample!)
                 action = env_wrapper.env.action_space.sample()
             else:
-                # this output corresponds to the output in baseline if --dueling=False is correctly set for baselines
+                # Optimally this should be if agent_type == "torch" but I am afraid to break something else
                 if env_wrapper.space_invaders:
                     torch_state = torch.Tensor(stacked_frames).cuda()
                     output = agent.pi(agent(torch_state)).detach().cpu().numpy()
                 else:
-                    output = agent.predict(stacked_frames)
+                    if agent_type == "deepq":
+                        output = agent.predict(stacked_frames)
+                    elif agent_type == "acer":
+                        output, _, _, _ = agent.step(stacked_frames)
                     if len(output) == 2:
                         output = output[0]
-                action = int(np.argmax(np.squeeze(output)))
+                if agent_type == "acer":
+                    # The ACER ouput contains the action directly.
+                    action = output[0]
+                else:
+                    action = int(np.argmax(np.squeeze(output)))
 
                 # save frame(s) in the domain of the action that the agent chose
                 file_name = os.path.join(path, domains[action], f"{step}")
@@ -293,15 +302,22 @@ def _save_image(frame, file_name):
 if __name__ == "__main__":
     # Settings
     env_name = "MsPacmanNoFrameskip-v4"
-    agent = keras.models.load_model("../res/agents/PacMan_Ingame_cropped_5actions_5M.h5")
+    # agent = keras.models.load_model("../res/agents/PacMan_Ingame_cropped_5actions_5M.h5")
+    agent = load_baselines_model(r"../res/agents/ACER_PacMan_FearGhost_cropped_5actions_40M", num_actions=5, num_env=1)
+    agent_type = "acer"
     nb_domains = 5
     nb_samples = 400000
-    dataset_path = "../res/datasets/PacMan_Ingame"
+    dataset_path = "../res/datasets/PacMan_FearGhost_cropped_5actions"
     unique_dataset_path = dataset_path + "_Unique"
     domains = list(map(str, np.arange(nb_domains)))
 
+    deepq_preprocessing = True
+    if agent_type == "acer":
+        deepq_preprocessing = False
+
     # Data set generation
-    create_dataset(env_name, nb_samples, dataset_path, agent, seed=42, epsilon=0.2, domains=domains)
+    create_dataset(env_name, nb_samples, dataset_path, agent, agent_type=agent_type, seed=42, epsilon=0.2,
+                   domains=domains, deepq_preprocessing = deepq_preprocessing)
     # Additional down-sampling to reduce memory cost for removing duplicates.
     # In the end, this should in most cases not minder the amount of total samples, since min_size is set.
     under_sample(dataset_path, min_size=nb_samples / nb_domains)

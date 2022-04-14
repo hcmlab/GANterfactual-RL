@@ -17,6 +17,14 @@ from src.olson.model import KerasAgent
 from src.star_gan.data_loader import get_star_gan_transform
 from star_gan.model import Generator
 
+from baselines.common.cmd_util import common_arg_parser
+from baselines.run import parse_cmdline_kwargs, configure_logger, get_env_type, get_learn_function,\
+    get_learn_function_defaults, build_env, get_default_network
+try:
+    from mpi4py import MPI
+except ImportError:
+    MPI = None
+
 
 def run_agent(max_steps, agent, env_name, seed=None, max_noop=1, render=True, power_pill_objective=False,
               max_episodes=None):
@@ -255,6 +263,70 @@ def load_olson_models(agent_file, encoder_file, generator_file, q_file, p_file, 
     P.eval()
 
     return agent, encoder, generator, Q, P
+
+
+def load_baselines_model(path, num_actions = False, num_env = 4):
+    """
+    Loads a model of the baselines repository.
+
+    :param path: Path to the trained agent, that was trained by the openai baselines repository.
+    :param num_actions: Used to define custom amount of actions. For example to remove ambiguous actions in Pacman.
+        If False, the nomral amount is used.
+    :param num_env: The number of envs to learn in parallel. Should be equivalent to batchsize during GAN training.
+    """
+    args = []
+    args.append("--alg=acer")
+    args.append("--env=MsPacmanNoFrameskip-v4")
+    args.append("--num_timesteps=0")
+    args.append("--load_path=" + path)
+    args.append("--play")
+    args.append(f"--num_env={num_env}")
+
+    # configure logger, disable logging in child MPI processes (with rank > 0)
+    arg_parser = common_arg_parser()
+    args, unknown_args = arg_parser.parse_known_args(args)
+    extra_args = parse_cmdline_kwargs(unknown_args)
+
+    if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
+        rank = 0
+        configure_logger(args.log_path)
+    else:
+        rank = MPI.COMM_WORLD.Get_rank()
+        configure_logger(args.log_path, format_strs=[])
+
+    env_type, env_id = get_env_type(args)
+    print('env_type: {}'.format(env_type))
+
+    total_timesteps = int(args.num_timesteps)
+    seed = args.seed
+
+    learn = get_learn_function(args.alg)
+    alg_kwargs = get_learn_function_defaults(args.alg, env_type)
+    alg_kwargs.update(extra_args)
+
+    env = build_env(args)
+    if num_actions:
+        env.action_space = gym.spaces.Discrete(num_actions)
+
+    if args.save_video_interval != 0:
+        raise NotImplementedError("Video saving is not implemented here. Use the origninal Baselines repository.")
+
+    if args.network:
+        alg_kwargs['network'] = args.network
+    else:
+        if alg_kwargs.get('network') is None:
+            alg_kwargs['network'] = get_default_network(env_type)
+
+    print('Training {} on {}:{} with arguments \n{}'.format(args.alg, env_type, env_id, alg_kwargs))
+
+    model = learn(
+        env=env,
+        seed=seed,
+        total_timesteps=total_timesteps,
+        **alg_kwargs
+    )
+
+    return model
 
 
 def generate_counterfactual(generator, image, target_domain, nb_domains, image_size=176):

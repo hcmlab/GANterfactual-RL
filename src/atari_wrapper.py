@@ -12,7 +12,7 @@ SPACE_INVADERS_SIZE = (80, 80)
 class AtariWrapper:
     ''' simple implementation of openai's atari_wrappers for our purposes'''
 
-    def __init__(self, env_name, power_pill_objective=False):
+    def __init__(self, env_name, power_pill_objective=False, deepq_preprocessing=True):
         self.env_name = env_name
         self.env = gym.make(env_name)
         self.env.reset()
@@ -20,6 +20,8 @@ class AtariWrapper:
             self.space_invaders = True
         else:
             self.space_invaders = False
+            # needed since our deepQ and ACER models use different preprocessing
+            self.deepq_preprocessing = deepq_preprocessing
         if self.space_invaders:
             self.width, self.height = SPACE_INVADERS_SIZE
         else:
@@ -51,6 +53,21 @@ class AtariWrapper:
         return frame[:, :, None]
 
     @staticmethod
+    def preprocess_frame_ACER(frame):
+        ''' preprocessing according to openai's atari_wrappers.WrapFrame
+            Does NOT apply scaling between 0 and 1 since ACER does not use it
+        :param frame: the input frame
+        :return: rescaled and greyscaled frame
+        '''
+        if len(frame) == 210:
+            frame = frame[0:173, :, :]
+        elif len(frame) == 176:
+            frame = np.array(Image.fromarray(frame).crop((8, 1, 168, 174)))
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+        frame = cv2.resize(frame, PAC_MAN_SIZE, interpolation=cv2.INTER_AREA)
+        return frame[:, :, None]
+
+    @staticmethod
     def preprocess_space_invaders_frame(frame):
         if len(frame) == 210:
             frame = frame[35:195]
@@ -73,8 +90,10 @@ class AtariWrapper:
             self.stacked_frame[:, :, i] = self.stacked_frame[:, :, i + 1]
         if self.space_invaders:
             new_frame = self.preprocess_space_invaders_frame(new_frame)
-        else:
+        elif self.deepq_preprocessing:
             new_frame = self.preprocess_frame(new_frame)
+        else:
+            new_frame = self.preprocess_frame_ACER(new_frame)
         new_frame = np.squeeze(new_frame)
         self.stacked_frame[:, :, 3] = new_frame
         return self.stacked_frame
