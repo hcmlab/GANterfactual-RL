@@ -1,12 +1,12 @@
 # DCGAN-like generator and discriminator
 import numpy as np
 import torch
+from tensorflow import keras
 from torch import nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.nn import init
 import torch.nn.init as weight_init
-
 
 channels = 3
 
@@ -55,7 +55,7 @@ class Encoder(nn.Module):
         x = self.leaky(self.batch3(self.conv3(x)))
         x = self.leaky(self.batch4(self.conv4(x)))
         x = self.leaky(self.batch5(self.conv5(x)))
-        x = x.view((-1, self.hidden_units))
+        x = x.contiguous().view((-1, self.hidden_units))
 
         return self.fc(x)
 
@@ -70,7 +70,7 @@ def catv(x , y):
     return torch.cat([x,v_to_cat], dim = 1)
 
 class Generator(nn.Module):
-    def __init__(self, z_dim, action_size):
+    def __init__(self, z_dim, action_size, pac_man=False):
         super(Generator, self).__init__()
         self.z_dim = z_dim
         use_value = 0
@@ -79,7 +79,10 @@ class Generator(nn.Module):
         self.fc = nn.Linear(z_dim + action_size, z_dim)
         self.deconv1 = nn.ConvTranspose2d(z_dim +  action_size, 512, 4, stride=2)
         self.batch1 = nn.BatchNorm2d(512)
-        self.deconv2 = nn.ConvTranspose2d(512 + action_size, 256, 4, stride=2, padding=0) # 10
+        if pac_man:
+            self.deconv2 = nn.ConvTranspose2d(512 + action_size, 256, 4, stride=3, padding=(1,1)) # 11
+        else:
+            self.deconv2 = nn.ConvTranspose2d(512 + action_size, 256, 4, stride=2, padding=0) # 10
         self.batch2 = nn.BatchNorm2d(256)
         self.deconv3 = nn.ConvTranspose2d(256 + action_size, 128, 4, stride=2, padding=(1,1)) #20
         self.batch3 = nn.BatchNorm2d(128)
@@ -132,9 +135,12 @@ def norm(x):
     return x
 #Encoder
 class Q_net(nn.Module):
-    def __init__(self, z_dim):
+    def __init__(self, z_dim, pacman=True):
         super(Q_net, self).__init__()
-        self.lin1 = nn.Linear(32, N)
+        if pacman:
+            self.lin1 = nn.Linear(256, N)
+        else:
+            self.lin1 = nn.Linear(32, N)
         self.bn1 = nn.BatchNorm1d(N)
         self.lin2 = nn.Linear(N, N)
         self.bn2 = nn.BatchNorm1d(N)
@@ -156,13 +162,16 @@ class Q_net(nn.Module):
 
 # Decoder
 class P_net(nn.Module):
-    def __init__(self, z_dim):
+    def __init__(self, z_dim, pacman=True):
         super(P_net, self).__init__()
         self.lin1 = nn.Linear(z_dim, N)
         self.bn1 = nn.BatchNorm1d(N)
         self.lin2 = nn.Linear(N, N)
         self.bn2 = nn.BatchNorm1d(N)
-        self.lin3 = nn.Linear(N, 32)
+        if pacman:
+            self.lin3 = nn.Linear(N, 256)
+        else:
+            self.lin3 = nn.Linear(N, 32)
 
     def forward(self, x):
         #x = self.lin1(x)
@@ -196,6 +205,7 @@ class D_net_gauss(nn.Module):
         x = F.relu(x)#leaky(x)
         return torch.sigmoid(self.lin3(x))
 
+
 class Agent(torch.nn.Module): # an actor-critic neural network
     def __init__(self, num_actions, latent_size = 256):
         super(Agent, self).__init__()
@@ -225,3 +235,44 @@ class Agent(torch.nn.Module): # an actor-critic neural network
 
     def value(self, x):
         return self.critic_linear(x)
+
+
+class KerasAgent(torch.nn.Module):
+    def __init__(self, agent_file, latent_size=256, num_actions=9):
+        super(KerasAgent, self).__init__()
+        self.agent = keras.models.load_model(agent_file)
+        nb_layers = len(self.agent.layers)
+        if nb_layers == 9:
+            # special case for dueling
+            latent_layer_idx = 6
+        else:
+            latent_layer_idx = nb_layers - 2
+        self.latent_size = latent_size
+
+        self.latent_model = keras.models.Model(inputs=self.agent.input,
+                                               outputs=self.agent.layers[latent_layer_idx].output)
+
+        # transform the last layer to a pytorch layer because pytorch gradients are needed for gradient descent
+        self.action_layer = nn.Linear(latent_size, num_actions)
+        action_layer_weights = self.agent.layers[latent_layer_idx + 1].get_weights()[0]
+        action_layer_biases = self.agent.layers[latent_layer_idx + 1].get_weights()[1]
+        self.action_layer.weight.data = torch.from_numpy(np.transpose(action_layer_weights))
+        self.action_layer.bias.data = torch.from_numpy(action_layer_biases)
+        self.action_layer.cuda()
+
+    def get_latent_size(self):
+        return self.latent_size
+
+    def forward(self, inputs):
+        keras_inputs = inputs.detach().permute(0, 2, 3, 1).cpu().numpy()
+        prediction = self.latent_model.predict(keras_inputs)
+        return torch.from_numpy(prediction).cuda()
+
+    def pi(self, x):
+        # keras_x = x.detach().cpu().numpy()
+        # prediction = self.action_model.predict(keras_x)
+        # return torch.from_numpy(prediction).cuda()
+        return self.action_layer(x)
+
+    def value(self, x):
+        raise NotImplementedError()

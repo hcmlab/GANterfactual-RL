@@ -1,6 +1,9 @@
+from typing import Tuple, Any
+
+import numpy as np
 from torch.utils import data
 from torchvision import transforms as T
-from torchvision.datasets import ImageFolder
+from torchvision.datasets import ImageFolder, DatasetFolder
 from PIL import Image
 import torch
 import os
@@ -68,22 +71,101 @@ class CelebA(data.Dataset):
         return self.num_images
 
 
-def get_loader(image_dir, attr_path, selected_attrs, crop_size=178, image_size=128, 
-               batch_size=16, dataset='CelebA', mode='train', num_workers=1):
-    """Build and return a data loader."""
+class PacmanNumpyDataset(DatasetFolder):
+    """
+    Custom dataset class for Pacman datasets with stacked frames saved as .npy files.
+    """
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        """
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: (sample, target) where target is class_index of the target class.
+        """
+        path, target = self.samples[index]
+        sample = self.loader(path)
+        if self.transform is not None:
+            # transform each channel separately and concat afterwards to allow for more than 3 channels
+            channel_samples = []
+            for channel in range(sample.shape[-1]):
+                channel_sample = np.asarray(sample[:, :, channel], dtype=np.float32)
+                channel_sample = Image.fromarray(channel_sample, "F")
+                channel_sample = self.transform(channel_sample)
+                channel_samples.append(channel_sample)
+            sample = torch.Tensor(len(channel_samples), *list(channel_samples[0].shape))
+            torch.cat(channel_samples, out=sample)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return sample, target
+
+
+class PacmanStackedImageDataset(DatasetFolder):
+    """
+    Custom dataset class for Pacman datasets with stacked frames saved as .npy files.
+    """
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        """
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: (sample, target) where target is class_index of the target class.
+        """
+        path, target = self.samples[index]
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        stacked_frames = []
+        stacked_frames_path_prefix = path[:-5]
+        stacked_frames_path_suffix = path[-4:]
+        for i in range(4):
+            sample = Image.open(stacked_frames_path_prefix + f"{i}{stacked_frames_path_suffix}")
+            if self.transform is not None:
+                sample = self.transform(sample)
+            stacked_frames.append(sample)
+
+        stacked_frames = np.stack(stacked_frames)
+        stacked_frames = stacked_frames.reshape((12, stacked_frames.shape[-2], stacked_frames.shape[-1]))
+
+        return stacked_frames, target
+
+    def __len__(self):
+        """Return the number of images."""
+        return int(np.ceil(len(self.samples) / 4))
+
+
+def get_star_gan_transform(crop_size, image_size, image_channels):
     transform = []
-    if mode == 'train':
-        transform.append(T.RandomHorizontalFlip())
     transform.append(T.CenterCrop(crop_size))
     transform.append(T.Resize(image_size))
     transform.append(T.ToTensor())
-    transform.append(T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+    if image_channels == 1 or image_channels == 4:
+        transform.append(T.Normalize(mean=(0.5,), std=(0.5,)))
+    else:
+        transform.append(T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
     transform = T.Compose(transform)
+    return transform
+
+
+def get_loader(image_dir, attr_path, selected_attrs, crop_size=178, image_size=128, 
+               batch_size=16, dataset='CelebA', mode='train', num_workers=1, image_channels=3):
+    """Build and return a data loader."""
+    transform = get_star_gan_transform(crop_size, image_size, image_channels)
 
     if dataset == 'CelebA':
         dataset = CelebA(image_dir, attr_path, selected_attrs, transform, mode)
     elif dataset == 'RaFD':
-        dataset = ImageFolder(image_dir, transform)
+        # use custom Pacman dataset instead to allow for numpy array input with more than 3 channels
+        if image_channels == 3:
+            dataset = ImageFolder(image_dir, transform)
+        elif image_channels == 12:
+            dataset = PacmanStackedImageDataset(image_dir, None, extensions=(".png",), transform=transform)
+        else:
+            dataset = PacmanNumpyDataset(image_dir, np.load, extensions=(".npy",), transform=transform)
 
     data_loader = data.DataLoader(dataset=dataset,
                                   batch_size=batch_size,

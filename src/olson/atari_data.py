@@ -1,25 +1,49 @@
-import sys
-import numpy as np
-import gym
-from scipy.misc import imresize
 from concurrent import futures
 
+import gym
+import numpy as np
+from PIL import Image, ImageOps
 
-#prepro = lambda img: imresize(img[35:195], (80,80)).astype(np.float32).reshape(3,80,80)/255.
-#prepro_rgb = lambda img: imresize(img[35:195], (80,80)).astype(np.float32)/255.
-prepro_rgb = lambda img: img[35:195].astype(np.float32)/255.
-prepro_bw = lambda img: imresize(img[35:195], (80,80)).astype(np.float32).mean(2).reshape(1,80,80)/255.
+from src.atari_wrapper import AtariWrapper
 
-#returns rgb, bw
-'''def prepro(img):
-    if img.shape[0] > 80: 
+
+def prepro_rgb(img, pacman=True):
+    if pacman and len(img) != 176:
+        img = img[0:173, :, :]
+        img = np.array(ImageOps.expand(Image.fromarray(img), (8, 1, 8, 2)))
+    elif not pacman and len(img) != 160:
         img = img[35:195]
-        img2 = imresize(img, (80,80)).astype(np.float32)
-        
-    return img.astype(np.float32)/255. , img2.mean(2).reshape(1,80,80)/255.
-'''
-def prepro(img):
-    return prepro_rgb(img), prepro_bw(img)
+    img = np.array(img).astype(np.float32) / 255.
+    return img
+
+
+def prepro_bw(img, pacman=True):
+    if pacman:
+        img = AtariWrapper.preprocess_frame(img)
+        img = np.squeeze(img, axis=-1)
+    else:
+        img = AtariWrapper.preprocess_space_invaders_frame(img)
+    img = np.expand_dims(img, axis=0)
+    return img
+
+
+def prepro(img, pacman=True):
+    return prepro_rgb(img, pacman=pacman), prepro_bw(img, pacman=pacman)
+
+
+def prepro_dataset_batch(img_batch, pacman=True):
+    rgb_batch = []
+    bw_batch = []
+    for i in range(len(img_batch)):
+        if pacman:
+            rgb = img_batch[i]
+            bw = img_batch[i][1:-2, 8:-8, :]
+        else:
+            rgb = bw = img_batch[i]
+        rgb_batch.append(prepro_rgb(rgb, pacman=pacman))
+        bw_batch.append(prepro_bw(bw, pacman=pacman))
+
+    return np.array(rgb_batch), np.array(bw_batch)
 
 
 def ablate_screen(orig_img, section):
@@ -62,7 +86,7 @@ def ablate_screen(orig_img, section):
         img[:,:,65:70,:] = 0
         img[:,:,75:80,:] = 0
     else:
-        raise "hey, you tried to ablate a screen that didnt exist"
+        print("hey, you tried to ablate a screen that didnt exist")
 
     return img
 
@@ -73,29 +97,50 @@ def map_fn(fn, *iterables):
 
 
 class MultiEnvironment():
-    def __init__(self, name, batch_size, fskip = 0):
+    def __init__(self, name, batch_size, fskip=4, power_pill_objective=False):
         self.batch_size = batch_size
         self.envs = [] #map(lambda idx: gym.make(name), range(batch_size))
         self.name = name
+        if name.startswith("SpaceInvaders"):
+            self.space_invaders = True
+        else:
+            self.space_invaders = False
         for i in range(batch_size):
            
             env = gym.make(name) 
-            if fskip > 0: env.unwrapped.frameskip = fskip
+            # if fskip > 0: env.unwrapped.frameskip = fskip
 
             env.seed(i)
             self.envs.append(env)
+        self.fskip = fskip
         self.action_meanings = self.envs[0].unwrapped.get_action_meanings()
         self.saved_state = None
+        self.power_pill_objective = power_pill_objective
+        self.power_pills_left = np.full(len(self.envs), 4)
+        self.noop_action = 0
 
     def seed(self, seed):
         for i in range(self.batch_size):
             self.envs[i].seed(seed + i)
 
-    def reset(self):
+    def reset(self, noop_min=0, noop_max=27):
         bws = []
         rgbs = []
-        for env in self.envs:
-            rgb, bw = prepro(env.reset())
+
+        for i, env in enumerate(self.envs):
+            self.power_pills_left[i] = 4
+            env.reset()
+            for _ in range(250):
+                obs, _, done, _ = env.step(self.noop_action)
+                if done:
+                    obs = env.reset()
+            noops = np.random.randint(noop_min + 1, noop_max + 1)
+            for _ in range(noops):
+                obs, _, done, _ = env.step(self.noop_action)
+                if done:
+                    obs = env.reset()
+
+            rgb, bw = prepro(obs, pacman=not self.space_invaders)
             rgbs.append(rgb)
             bws.append(bw)
         return np.array(rgbs), np.array(bws)
@@ -120,16 +165,40 @@ class MultiEnvironment():
         assert len(actions) == len(self.envs)
 
         def run_one_step(env, action):
-            state, reward, done, info = env.step(action)
+            state, stacked_state, reward, done, info = self.repeat_frames(env, action)
             if done:
                 state = env.reset()
-            rgb, bw = prepro(state)
+            rgb, bw = prepro(state, pacman=not self.space_invaders)
             return rgb, bw, reward, done, info
 
         results = map_fn(run_one_step, self.envs, actions)
         
         state_rgb, state_bw, rewards, dones, infos = zip(*results)
-        return np.array(state_rgb),np.array(state_bw), rewards, dones, infos
+        return np.array(state_rgb), np.array(state_bw), rewards, dones, infos
+
+    def repeat_frames(self, env, action):
+        ''' skip frames to be inline with baselines DQN. stops when the current game is done
+        :param action: the choosen action which will be repeated
+        :param skip_frames: the number of frames to skip
+        :return max frame: the frame used by the agent
+        :return stacked_observations: all skipped observations '''
+        stacked_observations = []
+        total_reward = 0
+        done = False
+        info = None
+        for i in range(self.fskip):
+            observation, reward, done, info = env.step(action)
+            total_reward += reward
+            stacked_observations.append(observation)
+
+            if self.ate_power_pill(reward):
+                self.power_pills_left -= 1
+
+        return observation, stacked_observations, total_reward, done, info
+
+    @staticmethod
+    def ate_power_pill(reward):
+        return reward == 50
 
 
 if __name__ == '__main__':
@@ -138,104 +207,3 @@ if __name__ == '__main__':
     for i in range(10):
         actions = np.random.randint(0, 4, size=batch_size)
         states, rewards, dones, infos = env.step(actions)
-
-'''
-import random
-import sys
-import numpy as np
-import gym
-import torch
-from torch.autograd import Variable
-from scipy.misc import imresize
-from copy import deepcopy
-from multiprocessing import Pool
-import model
-
-prepro = lambda img: imresize(img[35:195].mean(2), (80,80)).astype(np.float32).reshape(1,80,80)/255.
-
-class AtariDataloader():
-    def __init__(self, name, batch_size, agent_file, game_length=1000, frameskip=-1):
-        self.environments = []
-        self.batch_size = batch_size
-        self.game_length = game_length
-
-        temp_env = gym.make(name)
-        actions = temp_env.action_space.n
-
-        for i in range(batch_size):
-            env = gym.make(name)
-            if frameskip >= 0:
-                env.unwrapped.frameskip = 3
-            env.seed(i)
-            env.reset()
-
-            agent = model.Agent(actions).share_memory() #no cuda 
-            agent.load_state_dict(torch.load(agent_file))
-
-            self.environments.append((env, agent))
-
-    def get_action_size(self, env_name = None):
-        return self.environments[0][0].action_space.n
-        
-
-    def _get_playthrough(self, env):
-        (env, model) = env
-        ret = []
-        episode_length = 0
-        done = False
-        total_length = self.game_length + self.ending
-        cx = Variable(torch.zeros(1, 256))# lstm memory vector
-        hx = Variable(torch.zeros(1, 256)) # lstm activation vector
-        state = torch.Tensor(prepro(env.reset()))
-
-        states = []
-        values = []
-        logps = []
-
-        while episode_length <= (total_length):
-            episode_length += 1
-
-            value, logit, (hx, cx) = model((Variable( state.view(1,1,80,80)), (hx, cx)))
-            logp = torch.nn.functional.log_softmax(logit, dim=1)
-
-            action = logp.max(1)[1].data 
-            state, reward, done, _ = env.step(action.numpy()[0])
-            state = torch.Tensor(prepro(state))
-            
-            #ret.append((state, value.data, logp))
-            states.append(state.numpy())
-            values.append(value.data.numpy()[0])
-            logps.append(logp.data.numpy()[0])
-
-        return ((states), (values), (logps))
-
-    def _convert_to_torch(self, pooled_games):
-        states = []
-        values = []
-        logps = []
-        for g in pooled_games:
-            states.append(g[0])
-            values.append(g[1])
-            logps.append(g[2])
-
-        states = Variable(torch.Tensor(np.array(states))).cuda()
-        values = Variable(torch.Tensor(np.array(values))).cuda()
-        logps  = Variable(torch.Tensor(np.array(logps))).cuda()
-
-        return torch.transpose(states, 0,1), torch.transpose(values, 0,1), torch.transpose(logps, 0,1)
-
-    def get_game_runs(self):
-        self.ending = random.randint(0, 20)
-
-        #ret = self._get_playthrough(self.environments[0])
-        #import pdb; pdb.set_trace()
-
-        #return ret
-
-        #return the obs
-        pool = Pool(processes = self.batch_size)
-        games = pool.map(self._get_playthrough, (self.environments))
-        pool.close()
-
-        return self._convert_to_torch(games)
-'''

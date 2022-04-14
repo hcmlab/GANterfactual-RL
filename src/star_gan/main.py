@@ -34,7 +34,7 @@ def main(config):
     if config.dataset in ['RaFD', 'Both']:
         rafd_loader = get_loader(config.rafd_image_dir, None, None,
                                  config.rafd_crop_size, config.image_size, config.batch_size,
-                                 'RaFD', config.mode, config.num_workers)
+                                 'RaFD', config.mode, config.num_workers, config.image_channels)
     
 
     # Solver for training and testing StarGAN.
@@ -105,6 +105,15 @@ def get_parser():
     parser.add_argument('--sample_step', type=int, default=1000)
     parser.add_argument('--model_save_step', type=int, default=10000)
     parser.add_argument('--lr_update_step', type=int, default=1000)
+
+    # Extensions
+    parser.add_argument('--image_channels', type=int, default=3, help='number of channels of each image')
+    parser.add_argument('--agent_path', type=str, default=None, help='path to a h5 file containing a rl agent')
+    parser.add_argument('--lambda_counter', type=float, default=10, help='weight for counter loss')
+    parser.add_argument('--counter_mode', type=str, default='advantage', help='whether to use "raw", "softmax",'
+                                                                              '"advantage", or "z-score"')
+    parser.add_argument('--selective_counter', type=bool, default=True, help='whether to only use samples where'
+                                                                             'c_trg != c_org for counter-loss')
 
     return parser
 

@@ -1,30 +1,22 @@
 import argparse
-import random
+
+from tensorflow import keras
+import matplotlib
+import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
-from torch.optim.lr_scheduler import ExponentialLR
-from torchvision import datasets, transforms
 from torch import autograd
 from torch.autograd import Variable
-import model
-from time import sleep
 
-import numpy as np
-import matplotlib
+import src.olson.model as model
+
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import os
-from scipy.misc import imsave
-from scipy.misc import imresize
 from scipy.stats import entropy
 import gym
-from atari_data import MultiEnvironment, ablate_screen, prepro
+from src.olson.atari_data import MultiEnvironment, ablate_screen, prepro
 
 from collections import deque
-from copy import deepcopy
 from PIL import Image, ImageDraw, ImageFont
 
 from collections import defaultdict
@@ -63,7 +55,8 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-def generate_counterfactual(z_n, desired_action, agent, P, speed = .01, MAX_ITERS = 5000):
+
+def generate_counterfactual(z_n, desired_action, agent, P, speed = .01, MAX_ITERS=5000, verbose=False):
     target_action = Variable(torch.LongTensor([desired_action])).cuda()
 
     z_n_value = z_n.data.cpu().numpy()
@@ -99,9 +92,10 @@ def generate_counterfactual(z_n, desired_action, agent, P, speed = .01, MAX_ITER
             diff = max1 - max2
             epsilon = .05
             if diff >= epsilon or i > MAX_ITERS:
-                print("selected a {} from pi of {}"
-                    .format(action[0],logp_cf.exp().cpu().data[0].numpy()))
-                print("Finished counterfactual after {} iterations".format(i))
+                if verbose:
+                    print("selected a {} from pi of {}"
+                        .format(action[0],logp_cf.exp().cpu().data[0].numpy()))
+                    print("Finished counterfactual after {} iterations".format(i))
                 #print("Ending logits: {}".format(torch.exp(logp).data.cpu().numpy()))
                 break
         del z_n
@@ -155,11 +149,15 @@ def generate_saliency(atari, original, cf, salient_intensity):
 
 FONT_FILE = '/usr/local/eecsapps/cuda/cuda-10.0/jre/lib/fonts/LucidaSansRegular.ttf'
             
-def immsave(file, pixels, text_to_add = "", size=200):
-    np_img = imresize(pixels,size, interp = 'nearest')
+def immsave(file, pixels, text_to_add = "", size=None):
+    img = pixels.astype(np.uint8)
+    img = Image.fromarray(img)
+    if size is not None:
+        img = img.resize((size, size))
+    np_img = np.array(img)
 
     if text_to_add == "":
-        imsave(file, np_img)
+        Image.fromarray(np_img).save(file)
         return
 
     height_to_add = np.uint8(np_img.shape[0] / 8)
@@ -194,12 +192,11 @@ def get_low_entropy_states(agent, frames_to_cf, cur_envs, new_frame_bw, missing 
     entropies = []
     rewards=0
 
-    env = gym.make("SpaceInvaders-v0") # make a local (unshared) environment
-    env.unwrapped.frameskip = 7
+    env = gym.make("MsPacmanNoFrameskip-v4") # make a local (unshared) environment
     env.seed(13 )
     torch.manual_seed(13)
     img = ablate_screen(prepro(env.reset())[1], missing)
-    state = Variable(torch.Tensor(img).view(1,1,80,80)).cuda()
+    state = Variable(torch.Tensor(img).view(1,1,84,84)).cuda()
     state_history = deque([state, state.clone(), state.clone(),state.clone()], maxlen=4)
 
 
@@ -222,7 +219,7 @@ def get_low_entropy_states(agent, frames_to_cf, cur_envs, new_frame_bw, missing 
         all_game_actions[actions[0]] +=1
 
         img = ablate_screen(prepro(new_frame)[1], missing)
-        state_history.append(Variable(torch.Tensor(img).view(1,1,80,80)).cuda())
+        state_history.append(Variable(torch.Tensor(img).view(1,1,84,84)).cuda())
 
         probabilty_array = p.data.cpu().numpy()[0]
         cur_entropy = entropy(probabilty_array)
@@ -265,10 +262,10 @@ def run_game(encoder, generator,  agent, Q, P, envs, seed, img_dir, missing, fra
 
 
     if seed == 13:
-        min_entropy = 1.05
+        min_entropy = 2.16
         end_frame = 396
     elif seed == 45:
-        min_entropy = .815 
+        min_entropy = 2.16
         end_frame = 446
     else:
         exit("missing correct seeds for user study explanations")
@@ -303,7 +300,6 @@ def run_game(encoder, generator,  agent, Q, P, envs, seed, img_dir, missing, fra
         agent_state = torch.cat(list(agent_state_history), dim=1)#torch.cat(list(agent_state_history), dim=1)
 
         z_a = agent(agent_state)
-        value = agent.value(z_a)
         logits = agent.pi(z_a)
         #calculate_fancy_entropy(logits.cpu().data[0].numpy(), i)
         p = F.softmax(logits, dim=1)
@@ -410,7 +406,8 @@ def run_game(encoder, generator,  agent, Q, P, envs, seed, img_dir, missing, fra
         immsave(*files_to_save1[np.argmax(distances)])
         immsave(*files_to_save2[np.argmax(distances)])
         immsave(*files_to_save3[np.argmax(distances)])
-        imsave(*files_to_save4[np.argmax(distances)])
+        file, img = files_to_save4[np.argmax(distances)]
+        Image.fromarray(img).save(file)
 
             
 
