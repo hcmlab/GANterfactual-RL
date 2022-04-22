@@ -11,6 +11,8 @@ from src.atari_wrapper import AtariWrapper
 from src.dataset_evaluation import get_uniques
 from src.util import array_to_pil_format, load_baselines_model
 
+from baselines.common.tf_util import adjust_shape
+
 
 def create_dataset(env_name, size, target_path, agent, agent_type="deepq", seed=None, noop_range=(0, 30),
                    epsilon=0.0, power_pill_objective=False, domains=None, deepq_preprocessing = True):
@@ -231,14 +233,15 @@ def _generate_set(size, path, env_wrapper, agent, agent_type, domains, noop_rang
                     if agent_type == "deepq":
                         output = agent.predict(stacked_frames)
                     elif agent_type == "acer":
-                        output, _, _, _ = agent.step(stacked_frames)
+                        # we take the output of step_model.pi instead of using model.step because model.step converts
+                        # the output of the policy pi into a stochastic distribution. This makes the actions not
+                        # deterministic and does not 100% reflect the agent's reasoning.
+                        sess = agent.step_model.sess
+                        feed_dict = {agent.step_model.X: adjust_shape(agent.step_model.X, stacked_frames)}
+                        output = sess.run(agent.step_model.pi, feed_dict)
                     if len(output) == 2:
                         output = output[0]
-                if agent_type == "acer":
-                    # The ACER ouput contains the action directly.
-                    action = output[0]
-                else:
-                    action = int(np.argmax(np.squeeze(output)))
+                action = int(np.argmax(np.squeeze(output)))
 
                 # save frame(s) in the domain of the action that the agent chose
                 file_name = os.path.join(path, domains[action], f"{step}")
