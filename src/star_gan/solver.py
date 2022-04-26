@@ -12,9 +12,10 @@ from torchvision.utils import save_image
 from src.atari_wrapper import AtariWrapper
 from src.star_gan.model import Discriminator
 from src.star_gan.model import Generator
-from src.util import restrict_tf_memory, get_agent_prediction
+from src.util import restrict_tf_memory, get_agent_prediction, load_baselines_model
 import src.olson.model as olson_model
 
+from baselines.common.tf_util import adjust_shape
 
 class Solver(object):
     """Solver for training and testing StarGAN."""
@@ -73,17 +74,24 @@ class Solver(object):
         # Extensions
         torch.cuda.empty_cache()
         self.image_channels = config.image_channels
+        self.agent_type = config.agent_type
         if config.agent_path is None:
             self.agent = None
-        elif config.agent_path.endswith(".h5"):
+        elif self.agent_type == "deepq":
             restrict_tf_memory()
             self.pacman = True
             self.agent = keras.models.load_model(config.agent_path)
-        else:
+        elif self.agent_type == "olson":
             restrict_tf_memory()
             self.pacman = False
             self.agent = olson_model.Agent(config.c_dim, 32).cuda()
             self.agent.load_state_dict(torch.load(config.agent_path, map_location=lambda storage, loc: storage))
+        elif self.agent_type == "acer":
+            restrict_tf_memory()
+            self.pacman = True
+            self.agent = load_baselines_model(config.agent_path, num_actions=5, num_env=self.batch_size)
+        else:
+            raise NotImplementedError("Known agent-types are: deepq, olson and acer")
         self.lambda_counter = config.lambda_counter
         self.counter_mode = config.counter_mode
         self.selective_counter = config.selective_counter
@@ -213,8 +221,10 @@ class Solver(object):
         preprocessed_batch = []
         for i, frame in enumerate(batch):
             frame = (frame * 255).astype(np.uint8)
-            if self.pacman:
+            if self.agent_type == "deepq":
                 frame = AtariWrapper.preprocess_frame(frame)
+            elif self.agent_type == "acer":
+                frame = AtariWrapper.preprocess_frame_ACER(frame)
             else:
                 frame = AtariWrapper.preprocess_space_invaders_frame(frame)
 
@@ -342,8 +352,12 @@ class Solver(object):
                 if self.agent is not None: # and label_org[0] != label_trg[0]:
                     # Permute to get channels last
                     x_fake_keras = self.preprocess_batch_for_agent(x_fake)
-                    if isinstance(self.agent, keras.models.Model):
+                    if self.agent_type == "deepq":
                         agent_prediction = self.agent.predict_on_batch(x_fake_keras)
+                    elif self.agent_type == "acer":
+                        sess = self.agent.step_model.sess
+                        feed_dict = {self.agent.step_model.X: adjust_shape(self.agent.step_model.X, x_fake_keras)}
+                        agent_prediction = sess.run(self.agent.step_model.pi, feed_dict)
                     else:
                         torch_state = torch.Tensor(x_fake_keras).cuda()
                         agent_prediction = torch.softmax(self.agent.pi(self.agent(torch_state)).detach(), dim=-1)

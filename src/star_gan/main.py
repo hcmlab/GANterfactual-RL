@@ -114,6 +114,8 @@ def get_parser():
                                                                               '"advantage", or "z-score"')
     parser.add_argument('--selective_counter', type=bool, default=True, help='whether to only use samples where'
                                                                              'c_trg != c_org for counter-loss')
+    parser.add_argument('--agent_type', type=str, default="deepq", help='which agent type to use (deepq,'
+                                                                                'olson, acer)')
 
     return parser
 
