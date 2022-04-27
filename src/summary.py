@@ -10,11 +10,12 @@ from tensorflow import keras
 from src.dataset_generation import _preprocess
 from src.evaluation import Evaluator
 from src.util import init_environment, get_agent_prediction_from_stacked_frames, generate_counterfactual, \
-    restrict_tf_memory, generate_olson_counterfactual
+    restrict_tf_memory, generate_olson_counterfactual, load_baselines_model
 
+from baselines.common.tf_util import adjust_shape
 
 def generate_highlights_div_summary(env_name, agent, num_frames, num_simulations, interval_size, save_dir,
-                                    power_pill_objective=False, max_noop=1):
+                                    power_pill_objective=False, max_noop=1, agent_type = "keras"):
     """
     Implementation of the HIGHLIGHTS-DIV algorithm from
     "HIGHLIGHTS: Summarizing Agent Behavior to People" by Amir et al.
@@ -28,6 +29,7 @@ def generate_highlights_div_summary(env_name, agent, num_frames, num_simulations
     :param save_dir: Path to a directory that will be created and filled with num_frames summary frames.
     :param power_pill_objective: Whether the Power-Pill objective for Pac-Man is used.
     :param max_noop: Maximum amount of NOOPs executed at the start of each episode.
+    :param agent_type: the type of agent. Accepts "keras" for keras models and "acer" for acer baseline models.
     :return: None
     """
     # init
@@ -38,7 +40,7 @@ def generate_highlights_div_summary(env_name, agent, num_frames, num_simulations
 
     while runs < num_simulations:
         # init environment
-        env_wrapper, skip_frames = init_environment(env_name, power_pill_objective)
+        env_wrapper, skip_frames = init_environment(env_name, power_pill_objective, agent_type)
         stacked_frames = env_wrapper.reset(noop_max=max_noop)
         done = False
         steps = 0
@@ -48,7 +50,14 @@ def generate_highlights_div_summary(env_name, agent, num_frames, num_simulations
                 action_distribution = None
                 action = env_wrapper.env.action_space.sample()
             else:
-                action_distribution = get_agent_prediction_from_stacked_frames(agent, stacked_frames)
+                if agent_type == "keras":
+                    action_distribution = get_agent_prediction_from_stacked_frames(agent, stacked_frames)
+                elif agent_type == "acer":
+                    sess = agent.step_model.sess
+                    feed_dict = {agent.step_model.X: adjust_shape(agent.step_model.X, stacked_frames)}
+                    action_distribution = sess.run(agent.step_model.pi, feed_dict)
+                else:
+                    raise NotImplementedError("Known agent-types are: keras and acer")
                 action = np.argmax(np.squeeze(action_distribution))
 
             stacked_frames, observations, reward, done, info = env_wrapper.step(action, skip_frames=skip_frames)
@@ -204,13 +213,16 @@ if __name__ == "__main__":
     restrict_tf_memory()
 
     # Settings
-    summary_dir = "../res/HIGHLIGHTS_DIV/Summaries/PacMan_Ingame"
-    cf_summary_dir = "../res/HIGHLIGHTS_DIV/CF_Summaries/PacMan_Ingame2"
+    summary_dir = "../res/HIGHLIGHTS_DIV/Summaries/PacMan_FearGhost"
+    cf_summary_dir = "../res/HIGHLIGHTS_DIV/CF_Summaries/PacMan_FearGhost"
     env_name = "MsPacmanNoFrameskip-v4"
-    agent = keras.models.load_model("../res/agents/Pacman_Ingame_cropped_5actions_5M.h5")
+    # agent = keras.models.load_model("../res/agents/Pacman_Ingame_cropped_5actions_5M.h5")
+    agent = load_baselines_model(r"../res/agents/ACER_PacMan_FearGhost_cropped_5actions_40M", num_actions=5, num_env=1)
+    agent_type = "acer"
     num_frames = 5
     interval_size = 50
     num_simulations = 3
 
     # Generate a summary that is saved in cf_summary_dir
-    generate_highlights_div_summary(env_name, agent, num_frames, num_simulations, interval_size, cf_summary_dir)
+    generate_highlights_div_summary(env_name, agent, num_frames, num_simulations, interval_size, summary_dir,
+                                    agent_type="acer")

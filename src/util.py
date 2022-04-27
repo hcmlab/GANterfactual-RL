@@ -83,16 +83,20 @@ def run_agent(max_steps, agent, env_name, seed=None, max_noop=1, render=True, po
     print("STD Reward:", std_reward)
 
 
-def init_environment(env_name, power_pill_objective):
+def init_environment(env_name, power_pill_objective, agent_type):
     """
     Initializes a wrapped Gym environment for atari games. Only supported for Ms. Pac-Man and Space Invaders
 
     :param env_name: The Gym environment name.
     :param power_pill_objective: Whether the Power-Pill objective is used on Pac-Man.
+    :param agent_type: the type of Pacman Agent, ignored with Space Invader. Accepts "keras" or "acer".
     :return: (wrapper, skip_frames) - The environment wrapper and the amount of skipped frames that are used for the
         given environment.
     """
-    wrapper = AtariWrapper(env_name, power_pill_objective=power_pill_objective)
+    if env_name.startswith("MsPacman") and (agent_type == "acer"):
+        wrapper = AtariWrapper(env_name, power_pill_objective=power_pill_objective, deepq_preprocessing=False)
+    else:
+        wrapper = AtariWrapper(env_name, power_pill_objective=power_pill_objective)
 
     if env_name.startswith("MsPacman"):
         skip_frames = 4
