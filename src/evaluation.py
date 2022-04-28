@@ -11,11 +11,11 @@ from tensorflow import keras
 from src.dataset_evaluation import _get_subfolders
 from src.star_gan.model import Generator
 from src.util import get_action_names, restrict_tf_memory, get_agent_action, generate_counterfactual, \
-    generate_olson_counterfactual, load_olson_models
+    generate_olson_counterfactual, load_olson_models, load_baselines_model
 
 
 class Evaluator:
-    def __init__(self, agent, test_set_path, env_name, img_size=176):
+    def __init__(self, agent, test_set_path, env_name, agent_type="deepq", img_size=176):
         """
         Provides functionality for quantitative evaluations of counterfactual explainability approaches on the given
         test set.
@@ -24,11 +24,13 @@ class Evaluator:
         :param test_set_path: Path to the test set that should be used for the evaluation.
         :param env_name: Name of the Gym environment that was used to generate the data set.
         :param img_size: Size of frames from the data set (Quadratic images are assumed).
+        :param agent_type: The type of agent. "deepq" for keras deepq, "acer" for baselines acer, "torch" for a pytorch acer-critic
         """
         self.agent = agent
         self.test_set_path = test_set_path
         self.img_size = img_size
         self.env_name = env_name
+        self.agent_type = agent_type
 
         self.confusion_matrix = None
         self.df = None
@@ -107,7 +109,7 @@ class Evaluator:
                 for target_domain in range(self.nb_domains):
                     # generate cf
                     counterfactual, generation_time = cf_generation_fn(original, target_domain, self.nb_domains)
-                    action_on_counterfactual = get_agent_action(self.agent, counterfactual, self.pacman)
+                    action_on_counterfactual = get_agent_action(self.agent, counterfactual, self.pacman, agent_type=self.agent_type)
 
                     # update validity, proximity, sparsity and generation time
                     np_original = np.array(original, dtype=np.float32)
@@ -274,31 +276,40 @@ if __name__ == "__main__":
     nb_actions = 5
     env_name = "MsPacmanNoFrameskip-v4"
     img_size = 176
-    agent_file = "../res/agents/Pacman_Ingame_cropped_5actions_5M.h5"
-    agent = keras.models.load_model(agent_file)
+    # agent_file = "../res/agents/Pacman_Ingame_cropped_5actions_5M.h5"
+    agent_file = "../res/agents/ACER_PacMan_FearGhost_cropped_5actions_40M"
+    agent_type = "acer"
+    if agent_type == "deepq":
+        agent = keras.models.load_model(agent_file)
+    elif agent_type == "acer":
+        agent = load_baselines_model(agent_file, num_actions=5, num_env=1)
+    elif agent_type == "torch":
+        # TODO
+        raise NotImplementedError("not yet implemented")
 
     # Load a StarGAN generator
     generator = Generator(c_dim=nb_actions, channels=3).cuda()
-    generator.load_state_dict(torch.load("../res/models/PacMan_Ingame/models/200000-G.ckpt",
+    generator.load_state_dict(torch.load("../res/models/PacMan_FearGhost/models/200000-G.ckpt",
                                          map_location=lambda storage, loc: storage))
 
     # Load all relevant models that are necessary for the CF generation of Olson et al. via load_olson_models()
-    olson_agent, olson_encoder, olson_generator, olson_Q, olson_P = load_olson_models(
-        agent_file,
-        "../res/models/PacMan_Ingame_Olson/enc39",
-        "../res/models/PacMan_Ingame_Olson/gen39",
-        "../res/models/PacMan_Ingame_Olson_wae/Q",
-        "../res/models/PacMan_Ingame_Olson_wae/P",
-        action_size=nb_actions,
-        pac_man=pacman)
+    # olson_agent, olson_encoder, olson_generator, olson_Q, olson_P = load_olson_models(
+    #     agent_file,
+    #     "../res/models/PacMan_Ingame_Olson/enc39",
+    #     "../res/models/PacMan_Ingame_Olson/gen39",
+    #     "../res/models/PacMan_Ingame_Olson_wae/Q",
+    #     "../res/models/PacMan_Ingame_Olson_wae/P",
+    #     action_size=nb_actions,
+    #     pac_man=pacman)
 
     # Create the Evaluator
-    evaluator = Evaluator(agent, "../res/datasets/PacMan_Ingame_Unique/test", "MsPacmanNoFrameskip-v4", img_size=176)
+    evaluator = Evaluator(agent, "../res/datasets/PacMan_FearGhost_cropped_5actions_determinisitc_Unique/test", "MsPacmanNoFrameskip-v4", img_size=176,
+                          agent_type=agent_type)
 
     # Evaluate StarGAN
     cm, df = evaluator.evaluate_stargan(generator)
-    evaluator.save_results("../res/results/PacMan_Ingame_StarGAN")
+    evaluator.save_results("../res/results/PacMan_FearGhost_StarGAN")
 
     # Evaluate Olson et al.
-    cm_olson, df_olson = evaluator.evaluate_olson(olson_agent, olson_encoder, olson_generator, olson_Q, olson_P)
-    evaluator.save_results("../res/results/PacMan_Ingame_Olson")
+    # cm_olson, df_olson = evaluator.evaluate_olson(olson_agent, olson_encoder, olson_generator, olson_Q, olson_P)
+    # evaluator.save_results("../res/results/PacMan_Ingame_Olson")

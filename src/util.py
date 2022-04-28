@@ -25,6 +25,8 @@ try:
 except ImportError:
     MPI = None
 
+from baselines.common.tf_util import adjust_shape
+
 
 def run_agent(max_steps, agent, env_name, seed=None, max_noop=1, render=True, power_pill_objective=False,
               max_episodes=None):
@@ -134,7 +136,7 @@ def restrict_tf_memory():
             print(e)
 
 
-def get_agent_action(agent, frame, pacman=True):
+def get_agent_action(agent, frame, pacman=True, agent_type="deepq"):
     """
     Gets the action that an agent would choose on the given single frame under a greedy policy. The given frame is
     copied 3 times for the input to get a 4-image input for atari agents.
@@ -142,6 +144,7 @@ def get_agent_action(agent, frame, pacman=True):
     :param agent: The trained agent (Pytorch and Keras are supported).
     :param frame: The input frame to the agent.
     :param pacman: Whether the target environment is Pac-Man or Space Invaders.
+    :param agent_type: The type of agent. "deepq" for keras deepq, "acer" for baselines acer, "torch" for a pytorch acer-critic
     :return: Integer that encodes the chosen action.
     """
     if not isinstance(frame, Image.Image):
@@ -149,11 +152,11 @@ def get_agent_action(agent, frame, pacman=True):
     if frame.size == (176, 176):
         frame = frame.crop((8, 1, 168, 174))
 
-    agent_prediction = get_agent_prediction(agent, frame, pacman=pacman)
+    agent_prediction = get_agent_prediction(agent, frame, pacman=pacman, agent_type=agent_type)
     return int(np.argmax(np.squeeze(agent_prediction)))
 
 
-def get_agent_prediction(agent, frame, pacman=True):
+def get_agent_prediction(agent, frame, pacman=True, agent_type="deepq"):
     """
     Gets the unprocessed agent output of the given agent on the given single frame. The given frame is copied 3
     times for the input to get a 4-image input for atari agents.
@@ -161,10 +164,14 @@ def get_agent_prediction(agent, frame, pacman=True):
     :param agent: The trained agent (Pytorch and Keras are supported).
     :param frame: The input frame to the agent.
     :param pacman: Whether the target environment is Pac-Man or Space Invaders.
+    :param agent_type: The type of agent. "deepq" for keras deepq, "acer" for baselines acer, "torch" for a pytorch acer-critic
     :return: An action distribution (A list of numeric output values for each action).
     """
     if pacman:
-        frame = AtariWrapper.preprocess_frame(np.array(frame))
+        if agent_type == "deepq":
+            frame = AtariWrapper.preprocess_frame(np.array(frame))
+        elif agent_type == "acer":
+            frame = AtariWrapper.preprocess_frame_ACER(np.array(frame))
     else:
         frame = AtariWrapper.preprocess_space_invaders_frame(np.array(frame))
     frame = np.squeeze(frame)
@@ -176,6 +183,10 @@ def get_agent_prediction(agent, frame, pacman=True):
         output = agent.predict(stacked_frames)
         if len(output) == 2:
             output = output[0]
+    elif agent_type == "acer":
+        sess = agent.step_model.sess
+        feed_dict = {agent.step_model.X: adjust_shape(agent.step_model.X, stacked_frames)}
+        output = sess.run(agent.step_model.pi, feed_dict)
     else:
         torch_state = torch.Tensor(stacked_frames).cuda()
         output = agent.pi(agent(torch_state)).detach().cpu().numpy()
