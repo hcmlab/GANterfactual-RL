@@ -136,7 +136,7 @@ def restrict_tf_memory():
             print(e)
 
 
-def get_agent_action(agent, frame, pacman=True, agent_type="deepq"):
+def get_agent_action(agent, frame, pacman=True, agent_type="deepq", ablate_agent=False):
     """
     Gets the action that an agent would choose on the given single frame under a greedy policy. The given frame is
     copied 3 times for the input to get a 4-image input for atari agents.
@@ -152,11 +152,12 @@ def get_agent_action(agent, frame, pacman=True, agent_type="deepq"):
     if frame.size == (176, 176):
         frame = frame.crop((8, 1, 168, 174))
 
-    agent_prediction = get_agent_prediction(agent, frame, pacman=pacman, agent_type=agent_type)
+    agent_prediction = get_agent_prediction(agent, frame, pacman=pacman, agent_type=agent_type,
+                                            ablate_agent=ablate_agent)
     return int(np.argmax(np.squeeze(agent_prediction)))
 
 
-def get_agent_prediction(agent, frame, pacman=True, agent_type="deepq"):
+def get_agent_prediction(agent, frame, pacman=True, agent_type="deepq", ablate_agent=False):
     """
     Gets the unprocessed agent output of the given agent on the given single frame. The given frame is copied 3
     times for the input to get a 4-image input for atari agents.
@@ -173,7 +174,7 @@ def get_agent_prediction(agent, frame, pacman=True, agent_type="deepq"):
         elif agent_type == "acer":
             frame = AtariWrapper.preprocess_frame_ACER(np.array(frame))
     else:
-        frame = AtariWrapper.preprocess_space_invaders_frame(np.array(frame))
+        frame = AtariWrapper.preprocess_space_invaders_frame(np.array(frame), ablate_agent=ablate_agent)
     frame = np.squeeze(frame)
     stacked_frames = np.stack([frame for _ in range(4)], axis=-1)
     if not pacman:

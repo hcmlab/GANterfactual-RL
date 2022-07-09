@@ -8,6 +8,7 @@ from PIL import Image
 from matplotlib import pyplot as plt
 from tensorflow import keras
 
+import src.olson.model as olson_model
 from src.dataset_evaluation import _get_subfolders
 from src.star_gan.model import Generator
 from src.util import get_action_names, restrict_tf_memory, get_agent_action, generate_counterfactual, \
@@ -111,7 +112,9 @@ class Evaluator:
                 for target_domain in range(self.nb_domains):
                     # generate cf
                     counterfactual, generation_time = cf_generation_fn(original, target_domain, self.nb_domains)
-                    action_on_counterfactual = get_agent_action(self.agent, counterfactual, self.pacman, agent_type=self.agent_type)
+                    action_on_counterfactual = get_agent_action(self.agent, counterfactual, self.pacman,
+                                                                agent_type=self.agent_type,
+                                                                ablate_agent=self.ablate_agent)
 
                     # update validity, proximity, sparsity and generation time
                     np_original = np.array(original, dtype=np.float32)
