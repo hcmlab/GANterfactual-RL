@@ -95,6 +95,7 @@ class Solver(object):
         self.lambda_counter = config.lambda_counter
         self.counter_mode = config.counter_mode
         self.selective_counter = config.selective_counter
+        self.ablate_agent = config.ablate_agent
 
         # Build the model and tensorboard.
         self.build_model()
@@ -226,7 +227,7 @@ class Solver(object):
             elif self.agent_type == "acer":
                 frame = AtariWrapper.preprocess_frame_ACER(frame)
             else:
-                frame = AtariWrapper.preprocess_space_invaders_frame(frame)
+                frame = AtariWrapper.preprocess_space_invaders_frame(frame, ablate_agent=self.ablate_agent)
 
             frame = np.squeeze(frame)
             stacked_frames = np.stack([frame for _ in range(4)], axis=-1)

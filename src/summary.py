@@ -143,7 +143,7 @@ def generate_summary_counterfactuals(summary_dir, generator, nb_domains, image_s
 
 
 def generate_olson_summary_counterfactuals(summary_dir, agent, encoder, generator, Q, P, is_pacman, nb_domains,
-                                           save_dir, max_iters=5000):
+                                           save_dir, ablate_agent=False, max_iters=5000):
     """
     Generates counterfactuals for each target action on every summary state in the given summary directory with the
     approach of Olson et al.
@@ -173,7 +173,7 @@ def generate_olson_summary_counterfactuals(summary_dir, agent, encoder, generato
         frame = Image.open(os.path.join(summary_dir, file))
         for target_domain in range(nb_domains):
             cf, _ = generate_olson_counterfactual(frame, target_domain, agent, encoder, generator, Q, P, is_pacman,
-                                                  max_iters=max_iters)
+                                                  ablate_agent=ablate_agent, max_iters=max_iters)
             cf.save(os.path.join(save_dir, f"CF_FromFile_{file.split('.')[0]}_TargetDomain_{target_domain}.png"))
 
 

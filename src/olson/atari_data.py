@@ -17,12 +17,13 @@ def prepro_rgb(img, pacman=True):
     return img
 
 
-def prepro_bw(img, pacman=True):
+# Setting ablate_agent to default False because the code of olson et al. is already applying ablation elsewhere.
+def prepro_bw(img, pacman=True, ablate_agent=False):
     if pacman:
         img = AtariWrapper.preprocess_frame(img)
         img = np.squeeze(img, axis=-1)
     else:
-        img = AtariWrapper.preprocess_space_invaders_frame(img)
+        img = AtariWrapper.preprocess_space_invaders_frame(img, ablate_agent=ablate_agent)
     img = np.expand_dims(img, axis=0)
     return img
 

@@ -15,7 +15,7 @@ from src.util import get_action_names, restrict_tf_memory, get_agent_action, gen
 
 
 class Evaluator:
-    def __init__(self, agent, test_set_path, env_name, agent_type="deepq", img_size=176):
+    def __init__(self, agent, test_set_path, env_name, agent_type="deepq", img_size=176, ablate_agent=False):
         """
         Provides functionality for quantitative evaluations of counterfactual explainability approaches on the given
         test set.
@@ -31,6 +31,7 @@ class Evaluator:
         self.img_size = img_size
         self.env_name = env_name
         self.agent_type = agent_type
+        self.ablate_agent = ablate_agent
 
         self.confusion_matrix = None
         self.df = None
@@ -90,7 +91,8 @@ class Evaluator:
         """
         def gen_fn(sample, target_domain, nb_domains):
             return generate_olson_counterfactual(sample, target_domain, olson_agent, olson_encoder, olson_generator,
-                                                 olson_q, olson_p, is_pacman=self.pacman)
+                                                 olson_q, olson_p, is_pacman=self.pacman,
+                                                 ablate_agent=self.ablate_agent)
         return self._evaluate(gen_fn)
 
     def _evaluate(self, cf_generation_fn):
@@ -279,6 +281,7 @@ if __name__ == "__main__":
     # agent_file = "../res/agents/Pacman_Ingame_cropped_5actions_5M.h5"
     agent_file = "../res/agents/ACER_PacMan_FearGhost_cropped_5actions_40M"
     agent_type = "acer"
+    ablate_agent = False
     if agent_type == "deepq":
         agent = keras.models.load_model(agent_file)
     elif agent_type == "acer":
@@ -303,8 +306,8 @@ if __name__ == "__main__":
     #     pac_man=pacman)
 
     # Create the Evaluator
-    evaluator = Evaluator(agent, "../res/datasets/PacMan_FearGhost_cropped_5actions_determinisitc_Unique/test", "MsPacmanNoFrameskip-v4", img_size=176,
-                          agent_type=agent_type)
+    evaluator = Evaluator(agent, "../res/datasets/PacMan_FearGhost_cropped_5actions_determinisitc_Unique/test",
+                          "MsPacmanNoFrameskip-v4", img_size=176, agent_type=agent_type, ablate_agent=ablate_agent)
 
     # Evaluate StarGAN
     cm, df = evaluator.evaluate_stargan(generator)

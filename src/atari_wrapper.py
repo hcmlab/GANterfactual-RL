@@ -12,7 +12,7 @@ SPACE_INVADERS_SIZE = (80, 80)
 class AtariWrapper:
     ''' simple implementation of openai's atari_wrappers for our purposes'''
 
-    def __init__(self, env_name, power_pill_objective=False, deepq_preprocessing=True):
+    def __init__(self, env_name, power_pill_objective=False, deepq_preprocessing=True, ablate_agent=False):
         self.env_name = env_name
         self.env = gym.make(env_name)
         self.env.reset()
@@ -35,6 +35,7 @@ class AtariWrapper:
         self.noop_action = 0
         self.power_pill_objective = power_pill_objective
         self.power_pills_left = 4
+        self.ablate_agent = ablate_agent
 
     @staticmethod
     def preprocess_frame(frame):
@@ -68,12 +69,14 @@ class AtariWrapper:
         return frame[:, :, None]
 
     @staticmethod
-    def preprocess_space_invaders_frame(frame):
+    def preprocess_space_invaders_frame(frame, ablate_agent):
         if len(frame) == 210:
             frame = frame[35:195]
         frame = Image.fromarray(frame).resize(SPACE_INVADERS_SIZE, PIL.Image.BICUBIC)
         frame = np.array(frame).astype(np.float32).mean(2)
         frame = frame / 255.
+        if ablate_agent:
+            frame[70:] = 0
         return frame
 
     @staticmethod
@@ -89,7 +92,7 @@ class AtariWrapper:
         for i in range(3):
             self.stacked_frame[:, :, i] = self.stacked_frame[:, :, i + 1]
         if self.space_invaders:
-            new_frame = self.preprocess_space_invaders_frame(new_frame)
+            new_frame = self.preprocess_space_invaders_frame(new_frame, self.ablate_agent)
         elif self.deepq_preprocessing:
             new_frame = self.preprocess_frame(new_frame)
         else:

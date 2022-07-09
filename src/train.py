@@ -2,7 +2,7 @@ from src.star_gan.main import get_parser, main
 
 
 def train_star_gan(dataset, name, image_size=176, image_channels=3, c_dim=5, batch_size=16, agent_file=None,
-                   lambda_counter=1., counter_mode="advantage", agent_type="deepq"):
+                   lambda_counter=1., counter_mode="advantage", agent_type="deepq", ablate_agent=False):
     """
     Trains StarGAN on the given data set.
 
@@ -19,6 +19,8 @@ def train_star_gan(dataset, name, image_size=176, image_channels=3, c_dim=5, bat
     :param lambda_counter: Weight for the counterfactual loss.
     :param counter_mode: Mode of the counterfactual loss. Supported modes are "raw", "softmax", "advantage" and
         "z-score".
+    :param ablate_agent: Whether the laser canon should be removed from space invaders frames before they are input to
+        the agent.
     :return: None
     """
     args = [
@@ -37,6 +39,7 @@ def train_star_gan(dataset, name, image_size=176, image_channels=3, c_dim=5, bat
         f"--lambda_counter={lambda_counter}",
         f"--counter_mode={counter_mode}",
         f"--agent_type={agent_type}",
+        f"--ablate_agent={ablate_agent}",
 
         "--num_iters=200000",
         "--num_iters_decay=100000",
@@ -55,6 +58,6 @@ def train_star_gan(dataset, name, image_size=176, image_channels=3, c_dim=5, bat
 
 
 if __name__ == "__main__":
-    train_star_gan("PacMan_FearGhost_cropped_5actions_Unique", "PacMan_FearGhost_A_1", image_size=176, image_channels=3, c_dim=5,
-                   batch_size=16, lambda_counter=1, agent_file="ACER_PacMan_FearGhost_cropped_5actions_40M",
-                   counter_mode="advantage", agent_type="acer")
+    train_star_gan("SpaceInvaders_Abl", "SpaceInvaders_Abl", image_size=160, image_channels=3, c_dim=6,
+                   batch_size=16, lambda_counter=1, agent_file="abl_agent.tar",
+                   counter_mode="raw", agent_type="olson", ablate_agent=True)

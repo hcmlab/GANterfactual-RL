@@ -12,7 +12,7 @@ from torch.autograd import Variable
 import src.olson.model as olson_model
 import src.olson.top_entropy_counterfactual as olson_tec
 from src.atari_wrapper import AtariWrapper
-from src.olson.atari_data import prepro
+from src.olson.atari_data import prepro, ablate_screen
 from src.olson.model import KerasAgent
 from src.star_gan.data_loader import get_star_gan_transform
 from star_gan.model import Generator
@@ -383,7 +383,8 @@ def generate_counterfactual(generator, image, target_domain, nb_domains, image_s
     return counterfactual, generation_time
 
 
-def generate_olson_counterfactual(image, target_domain, agent, encoder, generator, Q, P, is_pacman, max_iters=5000):
+def generate_olson_counterfactual(image, target_domain, agent, encoder, generator, Q, P, is_pacman, ablate_agent,
+                                  max_iters=5000):
     """
     Generates a counterfactual frame for the given image with a trained approach of Olson et al.
 
@@ -395,6 +396,7 @@ def generate_olson_counterfactual(image, target_domain, agent, encoder, generato
     :param Q: The trained encoder Q from the Wasserstein Autoencoder.
     :param P: The trained decoder P from the Wasserstein Autoencoder.
     :param is_pacman: Whether the target environment is Pac-Man or Space Invaders.
+    :Param ablate_agent: Whether the laser canon should be removed from the frame that is passed to the agent.
     :param max_iters: Maximum amount of iterations for the gradient descent in the agents latent space via the
         Wasserstein Autoencoder.
     :return: (counterfactual, generation_time) - The counterfactual is a PIL image and the generation time is the pure
@@ -402,7 +404,10 @@ def generate_olson_counterfactual(image, target_domain, agent, encoder, generato
     """
     state_rgb, state_bw = prepro(np.array(image), pacman=is_pacman)
     state = Variable(torch.Tensor(np.expand_dims(state_rgb, axis=0)).permute(0, 3, 1, 2)).cuda()
-    agent_state = Variable(torch.Tensor(np.expand_dims(state_bw, axis=0)).cuda())
+    if ablate_agent:
+        agent_state = Variable(torch.Tensor(np.expand_dims(ablate_screen(state_bw, "agent"), axis=0)).cuda())
+    else:
+        agent_state = Variable(torch.Tensor(np.expand_dims(state_bw, axis=0)).cuda())
     agent_state = torch.cat([agent_state, agent_state.clone(), agent_state.clone(), agent_state.clone()], dim=1)
     np.set_printoptions(precision=4)
 
@@ -433,6 +438,7 @@ if __name__ == "__main__":
     img_size = 176
     agent_file = "../res/agents/Pacman_Ingame_cropped_5actions_5M.h5"
     agent = keras.models.load_model(agent_file)
+    ablate_agent = False
 
     # Load a StarGAN generator
     generator = Generator(c_dim=nb_actions, channels=3).cuda()
@@ -460,7 +466,7 @@ if __name__ == "__main__":
     # Generate a counterfactual with Olson et al.
     olson_cf, olson_generation_time = generate_olson_counterfactual(original_frame, target_action, olson_agent,
                                                                     olson_encoder, olson_generator, olson_Q, olson_P,
-                                                                    pacman)
+                                                                    pacman, ablate_agent)
 
     # Save CF images
     star_gan_cf.save("StarGAN_CF.png")

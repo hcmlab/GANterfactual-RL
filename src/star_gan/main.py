@@ -116,6 +116,8 @@ def get_parser():
                                                                              'c_trg != c_org for counter-loss')
     parser.add_argument('--agent_type', type=str, default="deepq", help='which agent type to use (deepq,'
                                                                                 'olson, acer)')
+    parser.add_argument('--ablate_agent', type=bool, default=False, help='whether to ablate the laser canon before'
+                                                                         'inputting a frame to the agent')
 
     return parser
 
