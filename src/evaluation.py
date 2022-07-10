@@ -277,25 +277,28 @@ if __name__ == "__main__":
     restrict_tf_memory()
 
     # Settings
-    pacman = True
-    nb_actions = 5
-    env_name = "MsPacmanNoFrameskip-v4"
-    img_size = 176
-    # agent_file = "../res/agents/Pacman_Ingame_cropped_5actions_5M.h5"
-    agent_file = "../res/agents/ACER_PacMan_FearGhost_cropped_5actions_40M"
-    agent_type = "acer"
-    ablate_agent = False
+    pacman = False
+    nb_actions = 6
+    env_name = "SpaceInvadersNoFrameskip-v4"
+    img_size = 160
+    agent_file = "../res/agents/abl_agent.tar"
+    agent_type = "olson"
+    ablate_agent = True
     if agent_type == "deepq":
         agent = keras.models.load_model(agent_file)
     elif agent_type == "acer":
         agent = load_baselines_model(agent_file, num_actions=5, num_env=1)
+    elif agent_type == "olson":
+        # Loads a torch model with the specific architecture that Olson et al. used
+        agent = olson_model.Agent(6, 32).cuda()
+        agent.load_state_dict(torch.load("../res/agents/abl_agent.tar", map_location=lambda storage, loc: storage))
     elif agent_type == "torch":
         # TODO
         raise NotImplementedError("not yet implemented")
 
     # Load a StarGAN generator
     generator = Generator(c_dim=nb_actions, channels=3).cuda()
-    generator.load_state_dict(torch.load("../res/models/PacMan_FearGhost/models/200000-G.ckpt",
+    generator.load_state_dict(torch.load("../res/models/SpaceInvaders_Abl/models/200000-G.ckpt",
                                          map_location=lambda storage, loc: storage))
 
     # Load all relevant models that are necessary for the CF generation of Olson et al. via load_olson_models()
@@ -309,12 +312,12 @@ if __name__ == "__main__":
     #     pac_man=pacman)
 
     # Create the Evaluator
-    evaluator = Evaluator(agent, "../res/datasets/PacMan_FearGhost_cropped_5actions_determinisitc_Unique/test",
-                          "MsPacmanNoFrameskip-v4", img_size=176, agent_type=agent_type, ablate_agent=ablate_agent)
+    evaluator = Evaluator(agent, "../res/datasets/SpaceInvaders_Abl/test", env_name, img_size=img_size,
+                          agent_type=agent_type, ablate_agent=ablate_agent)
 
     # Evaluate StarGAN
     cm, df = evaluator.evaluate_stargan(generator)
-    evaluator.save_results("../res/results/PacMan_FearGhost_StarGAN")
+    evaluator.save_results("../res/results/Space_Invaders_Abl")
 
     # Evaluate Olson et al.
     # cm_olson, df_olson = evaluator.evaluate_olson(olson_agent, olson_encoder, olson_generator, olson_Q, olson_P)

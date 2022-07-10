@@ -8,6 +8,7 @@ from PIL import Image
 from tensorflow import keras
 import torch
 
+import src.olson.model as olson_model
 from src.dataset_generation import _preprocess
 from src.evaluation import Evaluator
 from src.util import init_environment, get_agent_prediction_from_stacked_frames, generate_counterfactual, \
@@ -16,8 +17,10 @@ from src.util import init_environment, get_agent_prediction_from_stacked_frames,
 from baselines.common.tf_util import adjust_shape
 from src.star_gan.model import Generator
 
+
 def generate_highlights_div_summary(env_name, agent, num_frames, num_simulations, interval_size, save_dir,
-                                    power_pill_objective=False, max_noop=1, agent_type = "keras"):
+                                    power_pill_objective=False, max_noop=1, agent_type = "keras",
+                                    ablate_agent=False):
     """
     Implementation of the HIGHLIGHTS-DIV algorithm from
     "HIGHLIGHTS: Summarizing Agent Behavior to People" by Amir et al.
@@ -31,7 +34,9 @@ def generate_highlights_div_summary(env_name, agent, num_frames, num_simulations
     :param save_dir: Path to a directory that will be created and filled with num_frames summary frames.
     :param power_pill_objective: Whether the Power-Pill objective for Pac-Man is used.
     :param max_noop: Maximum amount of NOOPs executed at the start of each episode.
-    :param agent_type: the type of agent. Accepts "keras" for keras models and "acer" for acer baseline models.
+    :param agent_type: the type of agent. Accepts "keras" for keras models, "acer" for acer baseline models and "olson"
+        for a pytorch model with the same architecture as in Olson et al.
+    :param ablate_agent: Whether the laser canon should be hidden from frames that are input to the agent.
     :return: None
     """
     # init
@@ -42,7 +47,8 @@ def generate_highlights_div_summary(env_name, agent, num_frames, num_simulations
 
     while runs < num_simulations:
         # init environment
-        env_wrapper, skip_frames = init_environment(env_name, power_pill_objective, agent_type)
+        env_wrapper, skip_frames = init_environment(env_name, power_pill_objective, agent_type,
+                                                    ablate_agent=ablate_agent)
         stacked_frames = env_wrapper.reset(noop_max=max_noop)
         done = False
         steps = 0
@@ -58,8 +64,10 @@ def generate_highlights_div_summary(env_name, agent, num_frames, num_simulations
                     sess = agent.step_model.sess
                     feed_dict = {agent.step_model.X: adjust_shape(agent.step_model.X, stacked_frames)}
                     action_distribution = sess.run(agent.step_model.pi, feed_dict)
+                elif agent_type == "olson":
+                    action_distribution = get_agent_prediction_from_stacked_frames(agent, stacked_frames)
                 else:
-                    raise NotImplementedError("Known agent-types are: keras and acer")
+                    raise NotImplementedError("Known agent-types are: keras, acer and olson")
                 action = np.argmax(np.squeeze(action_distribution))
 
             stacked_frames, observations, reward, done, info = env_wrapper.step(action, skip_frames=skip_frames)
@@ -215,26 +223,27 @@ if __name__ == "__main__":
     restrict_tf_memory()
 
     # Settings
-    summary_dir = "../res/HIGHLIGHTS_DIV/Summaries/PacMan_FearGhost"
-    env_name = "MsPacmanNoFrameskip-v4"
-    # agent = keras.models.load_model("../res/agents/Pacman_Ingame_cropped_5actions_5M.h5")
-    agent = load_baselines_model(r"../res/agents/ACER_PacMan_FearGhost_cropped_5actions_40M", num_actions=5, num_env=1)
-    agent_type = "acer"
+    summary_dir = "../res/HIGHLIGHTS_DIV/Summaries/SpaceInvaders_Abl_CL_1"
+    env_name = "SpaceInvadersNoFrameskip-v4"
+    agent = olson_model.Agent(6, 32)
+    agent.load_state_dict(torch.load("../res/agents/abl_agent.tar", map_location=lambda storage, loc: storage))
+    agent_type = "olson"
     num_frames = 5
     interval_size = 50
-    num_simulations = 3
+    num_simulations = 50
+    ablate_agent = True
 
-    nb_actions = 5
-    img_size = 176
+    nb_actions = 6
+    img_size = 160
     # Load a StarGAN generator
     generator = Generator(c_dim=nb_actions, channels=3).cuda()
-    generator.load_state_dict(torch.load("../res/models/PacMan_FearGhost_A_1/models/200000-G.ckpt",
+    generator.load_state_dict(torch.load("../res/models/SpaceInvaders_Abl_CL_1/models/200000-G.ckpt",
                                          map_location=lambda storage, loc: storage))
-    cf_summary_dir = "../res/HIGHLIGHTS_DIV/CF_Summaries/PacMan_FearGhost_A_1"
+    cf_summary_dir = "../res/HIGHLIGHTS_DIV/CF_Summaries/SpaceInvaders_Abl_CL_1"
 
     # Generate a summary that is saved in summary_dir
     generate_highlights_div_summary(env_name, agent, num_frames, num_simulations, interval_size, summary_dir,
-                                    agent_type="acer")
+                                    agent_type=agent_type, ablate_agent=ablate_agent)
 
     # Generate CFs for that summary which are saved in cf_summary_dir
     generate_summary_counterfactuals(summary_dir, generator, nb_actions, img_size, cf_summary_dir)
