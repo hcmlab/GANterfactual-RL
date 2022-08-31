@@ -33,18 +33,21 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--epsilon', type=float, default=.2)
 parser.add_argument('--lr', type=float, default=1e-4)
-parser.add_argument('--checkpoint_dir', type=str, default='../../res/models/PacMan_PowerPill_Olson')
+# Output directory of the model that creates counterfactual states
+parser.add_argument('--checkpoint_dir', type=str, default='../../res/models/PacMan_FearGhost2_3_Olson')
 parser.add_argument('--epochs', type=int, default=300)
 
 parser.add_argument('--latent', type=int, default=16)
 parser.add_argument('--wae_latent', type=int, default=128)
-parser.add_argument('--agent_latent', type=int, default=256)
+parser.add_argument('--agent_latent', type=int, default=512)
 parser.add_argument('--seed', type=int, default=13)
 parser.add_argument('--env', type=str, default="MsPacmanNoFrameskip-v4")
-parser.add_argument('--Q', type=str, default="../../res/models/PacMan_PowerPill_Olson_wae/Q")
-parser.add_argument('--P', type=str, default="../../res/models/PacMan_PowerPill_Olson_wae/P")
+# Directory of the used wasserstein encoder
+parser.add_argument('--Q', type=str, default="../../res/models/PacMan_FearGhost2_3_Olson_wae/Q")
+parser.add_argument('--P', type=str, default="../../res/models/PacMan_FearGhost2_3_Olson_wae/P")
 parser.add_argument('--missing', type=str, default="none")
-parser.add_argument('--agent_file', type=str, default="../../res/agents/Pacman_PowerPill_cropped_5actions_5M.h5")
+# Directory of the RL-Agent that should be explained
+parser.add_argument('--agent_file', type=str, default="../../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3.pt")
 parser.add_argument('--enc_lam', type=float, default=5)
 parser.add_argument('--clip', type=float, default=.0001)
 parser.add_argument('--gen_lam', type=float, default=.5)
@@ -57,7 +60,8 @@ parser.add_argument('--use_agent', type=int, default=1)
 parser.add_argument('--gpu', type=int, default=7)
 
 parser.add_argument('--use_dataset', type=bool, default=True)
-parser.add_argument('--dataset_dir', type=str, default="../../res/datasets/PacMan_PowerPill_Unique")
+# The dataset used for training the model
+parser.add_argument('--dataset_dir', type=str, default="../../res/datasets/ACER_PacMan_FearGhost2_cropped_5actions_40M_3_Unique")
 parser.add_argument('--img_size', type=str, default=176)
 parser.add_argument('--img_channels', type=int, default=3)
 parser.add_argument('--action_size', type=int, default=5)
@@ -105,8 +109,11 @@ if __name__ == '__main__':
         exit()
         args.agent_file = args.env + ".model.80.tar"
 
-    if args.is_pacman:
-        agent = model.KerasAgent(args.agent_file, args.agent_latent)
+    if args.agent_file.endswith(".h5"):
+        agent = model.KerasAgent(args.agent_file, num_actions=action_size, latent_size=args.agent_latent)
+    elif args.agent_file.endswith(".pt"):
+        agent = model.ACER_Agent(num_actions=action_size, latent_size=args.agent_latent).cuda()
+        agent.load_state_dict(torch.load(args.agent_file))
     else:
         agent = model.Agent(action_size, args.agent_latent).cuda()
         agent.load_state_dict(torch.load(args.agent_file, map_location=map_loc))
@@ -117,8 +124,8 @@ if __name__ == '__main__':
     encoder = model.Encoder(Z_dim).cuda()
     generator = model.Generator(Z_dim, action_size, pac_man=args.is_pacman).cuda()
     discriminator = model.Discriminator(Z_dim, action_size).cuda()
-    Q = model.Q_net(args.wae_latent, pacman=args.is_pacman).cuda()
-    P = model.P_net(args.wae_latent, pacman=args.is_pacman).cuda()
+    Q = model.Q_net(args.wae_latent, agent_latent=args.agent_latent).cuda()
+    P = model.P_net(args.wae_latent, agent_latent=args.agent_latent).cuda()
 
 
     Q.load_state_dict(torch.load(args.Q, map_location="cuda:0"))

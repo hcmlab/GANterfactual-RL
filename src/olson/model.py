@@ -135,12 +135,9 @@ def norm(x):
     return x
 #Encoder
 class Q_net(nn.Module):
-    def __init__(self, z_dim, pacman=True):
+    def __init__(self, z_dim, agent_latent=32):
         super(Q_net, self).__init__()
-        if pacman:
-            self.lin1 = nn.Linear(256, N)
-        else:
-            self.lin1 = nn.Linear(32, N)
+        self.lin1 = nn.Linear(agent_latent, N)
         self.bn1 = nn.BatchNorm1d(N)
         self.lin2 = nn.Linear(N, N)
         self.bn2 = nn.BatchNorm1d(N)
@@ -162,16 +159,13 @@ class Q_net(nn.Module):
 
 # Decoder
 class P_net(nn.Module):
-    def __init__(self, z_dim, pacman=True):
+    def __init__(self, z_dim, agent_latent=32):
         super(P_net, self).__init__()
         self.lin1 = nn.Linear(z_dim, N)
         self.bn1 = nn.BatchNorm1d(N)
         self.lin2 = nn.Linear(N, N)
         self.bn2 = nn.BatchNorm1d(N)
-        if pacman:
-            self.lin3 = nn.Linear(N, 256)
-        else:
-            self.lin3 = nn.Linear(N, 32)
+        self.lin3 = nn.Linear(N, agent_latent)
 
     def forward(self, x):
         #x = self.lin1(x)
@@ -273,6 +267,54 @@ class KerasAgent(torch.nn.Module):
         # prediction = self.action_model.predict(keras_x)
         # return torch.from_numpy(prediction).cuda()
         return self.action_layer(x)
+
+    def value(self, x):
+        raise NotImplementedError()
+
+
+class ACER_Agent(nn.Module):
+    """
+    The ACER model as used by the openai-baselines repository.
+    """
+
+    def __init__(self, num_actions=5, latent_size=512):
+        super(ACER_Agent, self).__init__()
+        self.latent_size = latent_size
+        self.conv1 = nn.Conv2d(4, 32, 8, stride=4)
+        self.conv2 = nn.Conv2d(32, 64, 4, stride=2)
+        self.conv3 = nn.Conv2d(64, 64, 3, stride=1)
+        self.fc1 = nn.Linear(64 * 7 * 7, self.latent_size)
+        self.fc2 = nn.Linear(self.latent_size, num_actions)
+        self.relu = nn.ReLU()
+        self.flatten = nn.Flatten()
+
+    def transpose_conv(self, x):
+        """
+        For the flatten output to be identical to the one in tensorflow, we have to transpose the output of the last
+         conv layer. This should be equivalent to np.transpose(0,2,3,1)
+        """
+        x = torch.transpose(x, 1, 3)
+        return torch.transpose(x, 1, 2)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu(x)
+        x = self.conv2(x)
+        x = self.relu(x)
+        x = self.conv3(x)
+        x = self.relu(x)
+        x = self.transpose_conv(x)
+        x = self.flatten(x)
+        x = self.fc1(x)
+        latent = self.relu(x)
+        return latent
+
+    def get_latent_size(self):
+        return self.latent_size
+
+    def pi(self, x):
+        logits = self.fc2(x)
+        return logits
 
     def value(self, x):
         raise NotImplementedError()
