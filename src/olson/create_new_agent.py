@@ -31,11 +31,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--epsilon', type=float, default=.2)
 parser.add_argument('--ae_lr', type=float, default=.0001)
-parser.add_argument('--checkpoint_dir', type=str, default='../../res/models/PacMan_PowerPill_Olson_wae')
+parser.add_argument('--checkpoint_dir', type=str, default='../../res/models/PacMan_FearGhost2_3_Olson_wae')
 parser.add_argument('--latent', type=int, default=128)
-parser.add_argument('--agent_latent', type=int, default=256)
+parser.add_argument('--agent_latent', type=int, default=512)
 parser.add_argument('--env', type=str, default="MsPacmanNoFrameskip-v4")
-parser.add_argument('--agent_file', type=str, default="../../res/agents/Pacman_PowerPill_cropped_5actions_5M.h5")
+parser.add_argument('--agent_file', type=str, default="../../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3.pt")
 parser.add_argument('--missing', type=str, default="none")
 parser.add_argument('--info', type=str, default="")
 parser.add_argument('--m_frames', type=int, default=15)
@@ -43,7 +43,7 @@ parser.add_argument('--fskip', type=int, default=4)
 parser.add_argument('--gpu', type=int, default=0)
 
 parser.add_argument('--use_dataset', type=bool, default=True)
-parser.add_argument('--dataset_dir', type=str, default="../../res/datasets/PacMan_PowerPill_Unique")
+parser.add_argument('--dataset_dir', type=str, default="../../res/datasets/ACER_PacMan_FearGhost2_cropped_5actions_40M_3_Unique")
 parser.add_argument('--img_size', type=str, default=176)
 parser.add_argument('--img_channels', type=int, default=3)
 parser.add_argument('--action_size', type=int, default=5)
@@ -86,10 +86,13 @@ if __name__ == '__main__':
     # agent.load_state_dict(torch.load(args.agent_file, map_location=map_loc))
     # agent = model.KerasAgent(args.agent_file, args.agent_latent)
     if args.agent_file.endswith(".h5"):
-        agent = model.KerasAgent(args.agent_file, args.agent_latent)
-    else:
+        agent = model.KerasAgent(args.agent_file, num_actions=action_size, latent_size=args.agent_latent)
+    elif args.agent_file.endswith(".tar"):
         agent = model.Agent(action_size, args.agent_latent).cuda()
         agent.load_state_dict(torch.load(args.agent_file, map_location=map_loc))
+    elif args.agent_file.endswith(".pt"):
+        agent = model.ACER_Agent(action_size, args.agent_latent).cuda()
+        agent.load_state_dict(torch.load(args.agent_file))
 
 
     ###################
@@ -97,8 +100,8 @@ if __name__ == '__main__':
     z_dim = args.latent
 
 
-    Q = model.Q_net(z_dim, pacman=args.is_pacman).cuda()
-    P = model.P_net(z_dim, pacman=args.is_pacman).cuda()     # Encoder/Decoder
+    Q = model.Q_net(z_dim, agent_latent=args.agent_latent).cuda()
+    P = model.P_net(z_dim, agent_latent=args.agent_latent).cuda()     # Encoder/Decoder
 
 
     # Set optimizators
