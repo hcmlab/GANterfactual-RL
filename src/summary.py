@@ -12,7 +12,7 @@ import src.olson.model as olson_model
 from src.dataset_generation import _preprocess
 from src.evaluation import Evaluator
 from src.util import init_environment, get_agent_prediction_from_stacked_frames, generate_counterfactual, \
-    restrict_tf_memory, generate_olson_counterfactual, load_baselines_model
+    restrict_tf_memory, generate_olson_counterfactual, load_baselines_model, load_olson_models
 
 from baselines.common.tf_util import adjust_shape
 from src.star_gan.model import Generator
@@ -221,29 +221,54 @@ def create_cf_summary_collage(cf_summary_dirs, original_frame_prefix, nb_domains
 
 if __name__ == "__main__":
     restrict_tf_memory()
+    GENERATE_NEW_HIGHLIGHTS = False
+    OLSON = True
+    STARGAN = False
 
     # Settings
-    summary_dir = "../res/HIGHLIGHTS_DIV/Summaries/SpaceInvaders_Abl_CL_1"
-    env_name = "SpaceInvadersNoFrameskip-v4"
-    agent = olson_model.Agent(6, 32)
-    agent.load_state_dict(torch.load("../res/agents/abl_agent.tar", map_location=lambda storage, loc: storage))
-    agent_type = "olson"
-    num_frames = 5
-    interval_size = 50
-    num_simulations = 50
-    ablate_agent = True
+    summary_dir = "../res/HIGHLIGHTS_DIV/Summaries/PacMan_FearGhost2_3"
 
-    nb_actions = 6
-    img_size = 160
-    # Load a StarGAN generator
-    generator = Generator(c_dim=nb_actions, channels=3).cuda()
-    generator.load_state_dict(torch.load("../res/models/SpaceInvaders_Abl_CL_1/models/200000-G.ckpt",
-                                         map_location=lambda storage, loc: storage))
-    cf_summary_dir = "../res/HIGHLIGHTS_DIV/CF_Summaries/SpaceInvaders_Abl_CL_1"
+    if GENERATE_NEW_HIGHLIGHTS:
+        env_name = "SpaceInvadersNoFrameskip-v4"
+        agent = olson_model.Agent(6, 32)
+        agent.load_state_dict(torch.load("../res/agents/abl_agent.tar", map_location=lambda storage, loc: storage))
+        agent_type = "olson"
+        num_frames = 5
+        interval_size = 50
+        num_simulations = 50
+        ablate_agent = True
 
-    # Generate a summary that is saved in summary_dir
-    generate_highlights_div_summary(env_name, agent, num_frames, num_simulations, interval_size, summary_dir,
-                                    agent_type=agent_type, ablate_agent=ablate_agent)
+        # Generate a summary that is saved in summary_dir
+        generate_highlights_div_summary(env_name, agent, num_frames, num_simulations, interval_size, summary_dir,
+                                        agent_type=agent_type, ablate_agent=ablate_agent)
 
-    # Generate CFs for that summary which are saved in cf_summary_dir
-    generate_summary_counterfactuals(summary_dir, generator, nb_actions, img_size, cf_summary_dir)
+    nb_actions = 5
+    img_size = 176
+    agent_latent = 512
+    is_pacman = True
+    cf_summary_dir = "../res/HIGHLIGHTS_DIV/CF_Summaries/PacMan_FearGhost2_3"
+
+    if STARGAN:
+        # Load a StarGAN generator
+        generator = Generator(c_dim=nb_actions, channels=3).cuda()
+        generator.load_state_dict(torch.load("../res/models/SpaceInvaders_Abl_CL_1/models/200000-G.ckpt",
+                                             map_location=lambda storage, loc: storage))
+
+        # Generate CFs for that summary which are saved in cf_summary_dir
+        generate_summary_counterfactuals(summary_dir, generator, nb_actions, img_size, cf_summary_dir)
+
+    if OLSON:
+        # Load all relevant models that are necessary for the CF generation of Olson et al. via load_olson_models()
+        olson_agent, olson_encoder, olson_generator, olson_Q, olson_P = load_olson_models(
+            "../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3.pt",
+            "../res/models/PacMan_FearGhost2_3_Olson/enc39",
+            "../res/models/PacMan_FearGhost2_3_Olson/gen39",
+            "../res/models/PacMan_FearGhost2_3_Olson_wae/Q",
+            "../res/models/PacMan_FearGhost2_3_Olson_wae/P",
+            action_size=nb_actions,
+            agent_latent=agent_latent,
+            pac_man=is_pacman)
+
+        # Generate CFs for that summary which are saved in cf_summary_dir
+        generate_olson_summary_counterfactuals(summary_dir, olson_agent, olson_encoder, olson_generator, olson_Q, olson_P,
+                                               is_pacman, nb_actions, save_dir=cf_summary_dir + "_Olson")

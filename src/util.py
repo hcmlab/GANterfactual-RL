@@ -13,7 +13,7 @@ import src.olson.model as olson_model
 import src.olson.top_entropy_counterfactual as olson_tec
 from src.atari_wrapper import AtariWrapper
 from src.olson.atari_data import prepro, ablate_screen
-from src.olson.model import KerasAgent
+from src.olson.model import KerasAgent, ACER_Agent
 from src.star_gan.data_loader import get_star_gan_transform
 from star_gan.model import Generator
 
@@ -265,14 +265,21 @@ def load_olson_models(agent_file, encoder_file, generator_file, q_file, p_file, 
     """
     # init models
     if pac_man:
-        agent = KerasAgent(agent_file, agent_latent, action_size)
+        if agent_file.endswith(".h5"):
+            agent = KerasAgent(agent_file, num_actions=action_size, latent_size=agent_latent)
+        elif agent_file.endswith(".pt"):
+            agent = ACER_Agent(num_actions=action_size, latent_size=agent_latent).cuda()
+            agent.load_state_dict(torch.load(agent_file))
     else:
         agent = olson_model.Agent(action_size, 32).cuda()
+        # The line above seems to indicate that the code assumes agent latent space 32 for space invader.
+        # To be sure and since we need it for Olson Q and P, I set it here:
+        agent_latent = 32
         agent.load_state_dict(torch.load(agent_file, map_location=lambda storage, loc: storage))
     encoder = olson_model.Encoder(z_dim).cuda()
     generator = olson_model.Generator(z_dim, action_size, pac_man=pac_man).cuda()
-    Q = olson_model.Q_net(wae_z_dim, pacman=pac_man).cuda()
-    P = olson_model.P_net(wae_z_dim, pacman=pac_man).cuda()
+    Q = olson_model.Q_net(wae_z_dim, agent_latent=agent_latent).cuda()
+    P = olson_model.P_net(wae_z_dim, agent_latent=agent_latent).cuda()
 
     # load saved weights
     encoder.load_state_dict(torch.load(encoder_file, map_location="cuda:0"))
