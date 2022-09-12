@@ -43,7 +43,10 @@ def generate_highlights_div_summary(env_name, agent, num_frames, num_simulations
     runs = 0
     summary_importances = []
     summary_frames = []
+    summary_actions = []
     remaining_interval = 0
+    cummulative_reward = 0
+    cummulative_steps = 0
 
     while runs < num_simulations:
         # init environment
@@ -71,6 +74,7 @@ def generate_highlights_div_summary(env_name, agent, num_frames, num_simulations
                 action = np.argmax(np.squeeze(action_distribution))
 
             stacked_frames, observations, reward, done, info = env_wrapper.step(action, skip_frames=skip_frames)
+            cummulative_reward += reward
 
             if action_distribution is not None:
                 if remaining_interval > 0:
@@ -94,19 +98,23 @@ def generate_highlights_div_summary(env_name, agent, num_frames, num_simulations
                             # remove less important similar frame from summary
                             del summary_frames[most_similar_frame_idx]
                             del summary_importances[most_similar_frame_idx]
+                            del summary_actions[most_similar_frame_idx]
                             add = True
 
                     if add:
                         # add frame to summary
                         summary_frames.append(frame)
                         summary_importances.append(importance)
+                        summary_actions.append(action)
                         remaining_interval = interval_size
             steps += 1
-            print(f"\rProcessed {runs} runs and {steps} steps", end="")
+            cummulative_steps += 1
+            print(f"\rProcessed {runs} runs and {steps} steps. Cummulative rewards {cummulative_reward}."
+                  f" Cummulative steps {cummulative_steps}", end="")
         runs += 1
 
     print()
-    _save_summary(summary_frames, summary_importances, save_dir)
+    _save_summary(summary_frames, summary_importances, summary_actions, save_dir)
 
 
 def _get_most_similar_frame_index(frame, other_frames):
@@ -115,13 +123,13 @@ def _get_most_similar_frame_index(frame, other_frames):
     return np.argmax(similarities)
 
 
-def _save_summary(frames, importances, save_dir):
+def _save_summary(frames, importances, actions, save_dir):
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     else:
         raise FileExistsError(f"Save directory '{save_dir}' already exists.")
     for i, frame in enumerate(frames):
-        frame.save(os.path.join(save_dir, f"{i}_{int(importances[i])}.png"))
+        frame.save(os.path.join(save_dir, f"{i}_{int(importances[i])}_action{int(actions[i])}.png"))
 
 
 def generate_summary_counterfactuals(summary_dir, generator, nb_domains, image_size, save_dir):
@@ -222,36 +230,65 @@ def create_cf_summary_collage(cf_summary_dirs, original_frame_prefix, nb_domains
 if __name__ == "__main__":
     restrict_tf_memory()
     GENERATE_NEW_HIGHLIGHTS = False
-    OLSON = True
-    STARGAN = False
+    OLSON = False
+    STARGAN = True
 
     # Settings
-    summary_dir = "../res/HIGHLIGHTS_DIV/Summaries/PacMan_FearGhost2_3"
+    # summary_dir = "../res/HIGHLIGHTS_DIV/Summaries/PacMan_FearGhost2_3"
+    # summary_dir = "../res/HIGHLIGHTS_DIV/Summaries/Pacman_Ingame"
+    # summary_dir = "../res/HIGHLIGHTS_DIV/Summaries/Pacman_PowerPill"
+    summary_dir = "../res/HIGHLIGHTS_DIV/Summaries/SpacInvaders_Abl"
+
+    nb_actions = 6  # 5 for Pacman, 6 for SpaceInvader
+    img_size = 160  # 176 for Pacman, 160 for SpaceInvader
+    agent_latent = 32  # 512 for ACER, 256 for DQN, 32 for Olson Agents
+    is_pacman = False
+    cf_summary_dir = "../res/HIGHLIGHTS_DIV/CF_Summaries/SpacInvaders_Abl"
+
+    # model_name = "PacMan_FearGhost2_3"
+    # model_name = "PacMan_Ingame"
+    # model_name = "PacMan_PowerPill"
+    model_name = "SpaceInvaders_Abl"
+
+    # The Fear Ghost agent uses a pytorch version of the agent for the Olson CF generation
+    # but the baselines model for generating HIGHLIGHTS. Thats why we have to differentiate between the agents
+    # olson_agent_path = "../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3.pt",
+    # olson_agent_path = "../res/agents/Pacman_Ingame_cropped_5actions_5M.h5"
+    # olson_agent_path = "../res/agents/Pacman_PowerPill_cropped_5actions_5M.h5"
+    olson_agent_path = "../res/agents/abl_agent.tar"
 
     if GENERATE_NEW_HIGHLIGHTS:
-        env_name = "SpaceInvadersNoFrameskip-v4"
-        agent = olson_model.Agent(6, 32)
-        agent.load_state_dict(torch.load("../res/agents/abl_agent.tar", map_location=lambda storage, loc: storage))
+        env_name = "SpaceInvadersNoFrameskip-v4"  # "MsPacmanNoFrameskip-v4"
+        # agent_type = "acer"
+        # agent_path = r"../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3"
+        # agent_type = "keras"
+        # agent_path = r"../res/agents/Pacman_Ingame_cropped_5actions_5M.h5"
+        # agent_path = r"../res/agents/Pacman_PowerPill_cropped_5actions_5M.h5"
         agent_type = "olson"
+        agent_path = "../res/agents/abl_agent.tar"
         num_frames = 5
         interval_size = 50
         num_simulations = 50
+        # ablate_agent = False
         ablate_agent = True
+        if agent_type == "acer":
+            agent = load_baselines_model(agent_path, num_actions=5,
+                                     num_env=1)
+        if agent_type == "olson":
+            agent = olson_model.Agent(6, 32)
+            agent.load_state_dict(torch.load(agent_path, map_location=lambda storage, loc: storage))
+        elif agent_type == "keras":
+            agent = keras.models.load_model(agent_path)
+
 
         # Generate a summary that is saved in summary_dir
         generate_highlights_div_summary(env_name, agent, num_frames, num_simulations, interval_size, summary_dir,
                                         agent_type=agent_type, ablate_agent=ablate_agent)
 
-    nb_actions = 5
-    img_size = 176
-    agent_latent = 512
-    is_pacman = True
-    cf_summary_dir = "../res/HIGHLIGHTS_DIV/CF_Summaries/PacMan_FearGhost2_3"
-
     if STARGAN:
         # Load a StarGAN generator
         generator = Generator(c_dim=nb_actions, channels=3).cuda()
-        generator.load_state_dict(torch.load("../res/models/SpaceInvaders_Abl_CL_1/models/200000-G.ckpt",
+        generator.load_state_dict(torch.load("../res/models/" + model_name + "/models/200000-G.ckpt",
                                              map_location=lambda storage, loc: storage))
 
         # Generate CFs for that summary which are saved in cf_summary_dir
@@ -260,11 +297,11 @@ if __name__ == "__main__":
     if OLSON:
         # Load all relevant models that are necessary for the CF generation of Olson et al. via load_olson_models()
         olson_agent, olson_encoder, olson_generator, olson_Q, olson_P = load_olson_models(
-            "../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3.pt",
-            "../res/models/PacMan_FearGhost2_3_Olson/enc39",
-            "../res/models/PacMan_FearGhost2_3_Olson/gen39",
-            "../res/models/PacMan_FearGhost2_3_Olson_wae/Q",
-            "../res/models/PacMan_FearGhost2_3_Olson_wae/P",
+            olson_agent_path,
+            "../res/models/" + model_name + "_Olson/enc39",
+            "../res/models/" + model_name + "_Olson/gen39",
+            "../res/models/" + model_name + "_Olson_wae/Q",
+            "../res/models/" + model_name + "_Olson_wae/P",
             action_size=nb_actions,
             agent_latent=agent_latent,
             pac_man=is_pacman)

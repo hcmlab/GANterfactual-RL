@@ -1,0 +1,4 @@
+InGame: Processed 49 runs and 662 steps. Cummulative rewards 101780.0. Cummulative steps 35418
+PowerPill: Processed 49 runs and 652 steps. Cummulative rewards 74400.0. Cummulative steps 34820
+FearGhost: Processed 49 runs and 7212 steps. Cummulative rewards 47220.0. Cummulative steps 324508
+Spaceinvaders_Abl: Processed 49 runs and 338 steps. Cummulative rewards 19250.0. Cummulative steps 16900
