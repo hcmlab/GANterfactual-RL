@@ -15,7 +15,7 @@ from src.atari_wrapper import AtariWrapper
 from src.olson.atari_data import prepro, ablate_screen
 from src.olson.model import KerasAgent, ACER_Agent
 from src.star_gan.data_loader import get_star_gan_transform
-from star_gan.model import Generator
+from src.star_gan.model import Generator
 
 from baselines.common.cmd_util import common_arg_parser
 from baselines.run import parse_cmdline_kwargs, configure_logger, get_env_type, get_learn_function,\

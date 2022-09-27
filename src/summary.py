@@ -230,8 +230,8 @@ def create_cf_summary_collage(cf_summary_dirs, original_frame_prefix, nb_domains
 if __name__ == "__main__":
     restrict_tf_memory()
     GENERATE_NEW_HIGHLIGHTS = False
-    OLSON = False
-    STARGAN = True
+    OLSON = True
+    STARGAN = False
 
     # Settings
     # summary_dir = "../res/HIGHLIGHTS_DIV/Summaries/PacMan_FearGhost2_3"

@@ -277,15 +277,15 @@ if __name__ == "__main__":
     restrict_tf_memory()
 
     # Settings
-    pacman = True
-    nb_actions = 5
-    env_name = "MsPacmanNoFrameskip-v4"
-    img_size = 176
-    agent_file = "../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3"
-    agent_type = "acer"
+    pacman = False
+    nb_actions = 6
+    env_name = "SpaceInvadersNoFrameskip-v4"
+    img_size = 160
+    agent_file = "../res/agents/abl_agent.tar"
+    agent_type = "olson"
     model_type = "olson"
-    ablate_agent = False
-    agent_latent = 512
+    ablate_agent = True
+    agent_latent = 32
     if agent_type == "deepq":
         agent = keras.models.load_model(agent_file)
     elif agent_type == "acer":
@@ -303,7 +303,7 @@ if __name__ == "__main__":
         raise NotImplementedError("not yet implemented")
 
     # Create the Evaluator
-    evaluator = Evaluator(agent, "../res/datasets/ACER_PacMan_FearGhost2_cropped_5actions_40M_3_Unique/test", env_name,
+    evaluator = Evaluator(agent, "../res/datasets/SpaceInvaders_Abl/test", env_name,
                           img_size=img_size, agent_type=agent_type, ablate_agent=ablate_agent)
 
     if model_type == "stargan":
@@ -319,15 +319,15 @@ if __name__ == "__main__":
     if model_type == "olson":
         # Load all relevant models that are necessary for the CF generation of Olson et al. via load_olson_models()
         olson_agent, olson_encoder, olson_generator, olson_Q, olson_P = load_olson_models(
-            "../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3.pt",
-            "../res/models/PacMan_FearGhost2_3_Olson/enc39",
-            "../res/models/PacMan_FearGhost2_3_Olson/gen39",
-            "../res/models/PacMan_FearGhost2_3_Olson_wae/Q",
-            "../res/models/PacMan_FearGhost2_3_Olson_wae/P",
+            "../res/agents/abl_agent.tar",
+            "../res/models/SpaceInvaders_Abl_Olson/enc39",
+            "../res/models/SpaceInvaders_Abl_Olson/gen39",
+            "../res/models/SpaceInvaders_Abl_Olson_wae/Q",
+            "../res/models/SpaceInvaders_Abl_Olson_wae/P",
             action_size=nb_actions,
             agent_latent=agent_latent,
             pac_man=pacman)
 
         # Evaluate Olson et al.
         cm_olson, df_olson = evaluator.evaluate_olson(olson_agent, olson_encoder, olson_generator, olson_Q, olson_P)
-        evaluator.save_results("../res/results/PacMan_FearGhost2_3_Olson")
+        evaluator.save_results("../res/results/SpaceInvaders_Abl_Olson")
