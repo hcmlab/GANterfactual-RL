@@ -275,59 +275,74 @@ class Evaluator:
 
 if __name__ == "__main__":
     restrict_tf_memory()
+    GENERATE_NEW_RESULTS = False
 
-    # Settings
-    pacman = True
-    nb_actions = 5
-    env_name = "MsPacmanNoFrameskip-v4"
-    img_size = 176
-    agent_file = "../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3"
-    agent_type = "acer"
-    model_type = "olson"
-    ablate_agent = False
-    agent_latent = 512
-    if agent_type == "deepq":
-        agent = keras.models.load_model(agent_file)
-    elif agent_type == "acer":
-        agent = load_baselines_model(agent_file, num_actions=5, num_env=1)
-    elif agent_type == "olson":
-        # Loads a torch model with the specific architecture that Olson et al. used
-        agent = olson_model.Agent(6, 32).cuda()
-        agent.load_state_dict(torch.load(agent_file, map_location=lambda storage, loc: storage))
-    elif agent_type == "torch_acer":
-        # diry numbers for 5 actions for pacman and latent size 512
-        agent = olson_model.ACER_Agent(num_actions=5, latent_size=512).cuda()
-        agent.load_state_dict(torch.load(agent_file))
-    elif agent_type == "torch":
-        # TODO
-        raise NotImplementedError("not yet implemented")
+    if GENERATE_NEW_RESULTS:
+        # Settings
+        ## Pacman
+        pacman = True
+        nb_actions = 5
+        env_name = "MsPacmanNoFrameskip-v4"
+        img_size = 176
+        agent_file = "../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3"
+        agent_type = "acer"
+        model_type = "olson"
+        ablate_agent = False
+        agent_latent = 512
+        ## Spaceinvader
+        # pacman = False
+        # nb_actions = 6
+        # env_name = "SpaceInvadersNoFrameskip-v4"
+        # img_size = 160
+        # agent_file = "../res/agents/abl_agent.tar"
+        # agent_type = "olson"
+        # model_type = "stargan"
+        # ablate_agent = True
+        # agent_latent = 512
+        if agent_type == "deepq":
+            agent = keras.models.load_model(agent_file)
+        elif agent_type == "acer":
+            agent = load_baselines_model(agent_file, num_actions=5, num_env=1)
+        elif agent_type == "olson":
+            # Loads a torch model with the specific architecture that Olson et al. used
+            agent = olson_model.Agent(6, 32).cuda()
+            agent.load_state_dict(torch.load(agent_file, map_location=lambda storage, loc: storage))
+        elif agent_type == "torch_acer":
+            # diry numbers for 5 actions for pacman and latent size 512
+            agent = olson_model.ACER_Agent(num_actions=5, latent_size=512).cuda()
+            agent.load_state_dict(torch.load(agent_file))
+        elif agent_type == "torch":
+            # TODO
+            raise NotImplementedError("not yet implemented")
 
-    # Create the Evaluator
-    evaluator = Evaluator(agent, "../res/datasets/ACER_PacMan_FearGhost2_cropped_5actions_40M_3_Unique/test", env_name,
-                          img_size=img_size, agent_type=agent_type, ablate_agent=ablate_agent)
+        # Create the Evaluator
+        evaluator = Evaluator(agent, "../res/datasets/ACER_PacMan_FearGhost2_cropped_5actions_40M_3_Unique/test", env_name,
+                              img_size=img_size, agent_type=agent_type, ablate_agent=ablate_agent)
 
-    if model_type == "stargan":
-        # Load a StarGAN generator
-        generator = Generator(c_dim=nb_actions, channels=3).cuda()
-        generator.load_state_dict(torch.load("../res/models/SpaceInvaders_Abl/models/200000-G.ckpt",
-                                             map_location=lambda storage, loc: storage))
+        if model_type == "stargan":
+            # Load a StarGAN generator
+            generator = Generator(c_dim=nb_actions, channels=3).cuda()
+            generator.load_state_dict(torch.load("../res/models/SpaceInvaders_Abl/models/200000-G.ckpt",
+                                                 map_location=lambda storage, loc: storage))
 
-        # Evaluate StarGAN
-        cm, df = evaluator.evaluate_stargan(generator)
-        evaluator.save_results("../res/results/Space_Invaders_Abl")
+            # Evaluate StarGAN
+            cm, df = evaluator.evaluate_stargan(generator)
+            evaluator.save_results("../res/results/Space_Invaders_Abl")
 
-    if model_type == "olson":
-        # Load all relevant models that are necessary for the CF generation of Olson et al. via load_olson_models()
-        olson_agent, olson_encoder, olson_generator, olson_Q, olson_P = load_olson_models(
-            "../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3.pt",
-            "../res/models/PacMan_FearGhost2_3_Olson/enc39",
-            "../res/models/PacMan_FearGhost2_3_Olson/gen39",
-            "../res/models/PacMan_FearGhost2_3_Olson_wae/Q",
-            "../res/models/PacMan_FearGhost2_3_Olson_wae/P",
-            action_size=nb_actions,
-            agent_latent=agent_latent,
-            pac_man=pacman)
+        if model_type == "olson":
+            # Load all relevant models that are necessary for the CF generation of Olson et al. via load_olson_models()
+            olson_agent, olson_encoder, olson_generator, olson_Q, olson_P = load_olson_models(
+                "../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3.pt",
+                "../res/models/PacMan_FearGhost2_3_Olson/enc39",
+                "../res/models/PacMan_FearGhost2_3_Olson/gen39",
+                "../res/models/PacMan_FearGhost2_3_Olson_wae/Q",
+                "../res/models/PacMan_FearGhost2_3_Olson_wae/P",
+                action_size=nb_actions,
+                agent_latent=agent_latent,
+                pac_man=pacman)
 
-        # Evaluate Olson et al.
-        cm_olson, df_olson = evaluator.evaluate_olson(olson_agent, olson_encoder, olson_generator, olson_Q, olson_P)
-        evaluator.save_results("../res/results/PacMan_FearGhost2_3_Olson")
+    # To reload old evaluation results
+    else:
+        pd.set_option('display.max_columns', None)
+        results = Evaluator.get_results_comparison(["../res/results/SpaceInvaders_Abl", "../res/results/SpaceInvaders_Abl_Olson"])
+        print(results)
