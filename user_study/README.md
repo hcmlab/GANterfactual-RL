@@ -22,3 +22,13 @@ pair of conditions (*mv_control_olson.csv*, *mv_control_starGAN.csv*, and *mv_ol
 These were used to easily conduct Mann-Whitney-U-Tests with the open source software Jamovi (Version 2.2.5.0). 
 The corresponding Jamovi files files are *control-olson.omv*, *control-starGAN.omv*, and *olson-starGAN.omv*.
 
+*demographics.py* calculates and prints demographics like the mean age and the percentage of female participants.
+
+### Plots
+
+*main_plots.py* generates the main plots for our paper (Main task scores and explanation satisfaction) and saves them 
+in the folder *figures*.
+
+*demographics.py* generates plots for the participants demographics and saves them in the folder *figures/demographic*.
+
+*explorative_plots.py* generates additional plots we looked at and saves them in *figures/explorative*.
