@@ -307,15 +307,55 @@ def _save_image(frame, file_name):
 
 
 if __name__ == "__main__":
+    ## For Pacman
+    # Settings
+    env_name = "MsPacmanNoFrameskip-v4"
+    # agent = keras.models.load_model("../res/agents/PacMan_Ingame_cropped_5actions_5M.h5")
+    agent = load_baselines_model(r"../res/agents/ACER_PacMan_FearGhost_cropped_5actions_40M", num_actions=5, num_env=1)
+    agent_type = "acer"
+    nb_domains = 5
+    nb_samples = 400000
+    dataset_path = "../res/datasets/PacMan_FearGhost_cropped_5actions"
+    unique_dataset_path = dataset_path + "_Unique"
+    domains = list(map(str, np.arange(nb_domains)))
+
+    deepq_preprocessing = True
+    if agent_type == "acer":
+        deepq_preprocessing = False
+
+    # Data set generation
+    create_dataset(env_name, nb_samples, dataset_path, agent, agent_type=agent_type, seed=42, epsilon=0.2,
+                   domains=domains, deepq_preprocessing = deepq_preprocessing)
+    # Additional down-sampling to reduce memory cost for removing duplicates.
+    # In the end, this should in most cases not minder the amount of total samples, since min_size is set.
+    under_sample(dataset_path, min_size=nb_samples / nb_domains)
+    create_unique_dataset(unique_dataset_path, dataset_path)
+    under_sample(unique_dataset_path)
+    split_dataset(unique_dataset_path, 0.1, domains)
+
+    ## For SpaceInvaders
+    # # Settings
+    # env_name = "SpaceInvadersNoFrameskip-v4"
+    # agent = olson_model.Agent(6, 32).cuda()
+    # agent.load_state_dict(torch.load("../res/agents/abl_agent.tar", map_location=lambda storage, loc: storage))
+    # nb_domains = 6
+    # nb_samples = 400000
+    # dataset_path = "../res/datasets/SpaceInvaders_Abl"
+    # unique_dataset_path = dataset_path + "_Unique"
+    # domains = list(map(str, np.arange(nb_domains)))
+    #
+    # # Data set generation
+    # create_dataset(env_name, nb_samples, dataset_path, agent, seed=42, epsilon=0.2, domains=domains, ablate_agent=True)
+    # create_clean_test_set(dataset_path, samples_per_domain=500)
+
+    # ## For training without dataset cleaining
     # # Settings
     # env_name = "MsPacmanNoFrameskip-v4"
-    # # agent = keras.models.load_model("../res/agents/PacMan_Ingame_cropped_5actions_5M.h5")
-    # agent = load_baselines_model(r"../res/agents/ACER_PacMan_FearGhost_cropped_5actions_40M", num_actions=5, num_env=1)
-    # agent_type = "acer"
+    # agent = keras.models.load_model("../res/agents/PacMan_Ingame_cropped_5actions_5M.h5")
+    # agent_type = "deepq"
     # nb_domains = 5
     # nb_samples = 400000
-    # dataset_path = "../res/datasets/PacMan_FearGhost_cropped_5actions"
-    # unique_dataset_path = dataset_path + "_Unique"
+    # dataset_path = "../res/datasets/PacMan_Ingame_cropped_5actions_no_cleaning"
     # domains = list(map(str, np.arange(nb_domains)))
     #
     # deepq_preprocessing = True
@@ -323,31 +363,5 @@ if __name__ == "__main__":
     #     deepq_preprocessing = False
     #
     # # Data set generation
-    # create_dataset(env_name, nb_samples, dataset_path, agent, agent_type=agent_type, seed=42, epsilon=0.2,
-    #                domains=domains, deepq_preprocessing = deepq_preprocessing)
-    # # Additional down-sampling to reduce memory cost for removing duplicates.
-    # # In the end, this should in most cases not minder the amount of total samples, since min_size is set.
-    # under_sample(dataset_path, min_size=nb_samples / nb_domains)
-    # create_unique_dataset(unique_dataset_path, dataset_path)
-    # under_sample(unique_dataset_path)
-    # split_dataset(unique_dataset_path, 0.1, domains)
-
-    # Settings
-    env_name = "SpaceInvadersNoFrameskip-v4"
-    agent = olson_model.Agent(6, 32).cuda()
-    agent.load_state_dict(torch.load("../res/agents/abl_agent.tar", map_location=lambda storage, loc: storage))
-    nb_domains = 6
-    nb_samples = 400000
-    dataset_path = "../res/datasets/SpaceInvaders_Abl"
-    unique_dataset_path = dataset_path + "_Unique"
-    domains = list(map(str, np.arange(nb_domains)))
-
-    # Data set generation
-    create_dataset(env_name, nb_samples, dataset_path, agent, seed=42, epsilon=0.2, domains=domains, ablate_agent=True)
-    # Additional down-sampling to reduce memory cost for removing duplicates.
-    # In the end, this should in most cases not minder the amount of total samples, since min_size is set.
-    # under_sample(dataset_path, min_size=nb_samples / nb_domains)
-    # create_unique_dataset(unique_dataset_path, dataset_path)
-    # under_sample(unique_dataset_path)
-    # split_dataset(unique_dataset_path, 0.1, domains)
-    create_clean_test_set(dataset_path, samples_per_domain=500)
+    # create_dataset(env_name, nb_samples, dataset_path, agent, agent_type=agent_type, seed=42, epsilon=0.0,
+    #                domains=domains, deepq_preprocessing=deepq_preprocessing)
