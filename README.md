@@ -1,5 +1,7 @@
 # GANterfactual-RL: Understanding Reinforcement Learning Agents' Strategies through Visual Counterfactual Explanations
 
+![Scheme of our approach and two example counterfactuals.](readme_images/GitBanner.png)
+
 This repository contains the official source code for the AAMAS 2023 paper [GANterfactual-RL: Understanding Reinforcement Learning Agents' Strategies through Visual Counterfactual Explanations](https://arxiv.org/abs/2302.12689).
 This Readme gives an overview on how to install the requirements and use the code.
 
@@ -249,3 +251,7 @@ for these summary states (in [res/HIGHLIGHTS_DIV/CF_Summaries](../main/res/HIGHL
 
 We used the folders res/datasets and res/models to save generated datasets and trained Counterfactual Explanation approaches. However, these
 folders are not added to the repository due to the high storage usage. They are available on request.
+
+## User Study
+The folder [user_study](../main/user_study) contains the evaluation of our user study.
+ For more details, see the readme there.
