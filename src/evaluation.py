@@ -6,7 +6,7 @@ import seaborn as sn
 import torch
 from PIL import Image
 from matplotlib import pyplot as plt
-from tensorflow import keras
+import keras
 
 import src.olson.model as olson_model
 from src.dataset_evaluation import _get_subfolders
@@ -288,7 +288,7 @@ if __name__ == "__main__":
         agent_type = "acer"
         model_type = "olson"
         ablate_agent = False
-        agent_latent = 512
+        agent_latent = 512 # 256 for deepq, 512 for ACER
         ## Spaceinvader
         # pacman = False
         # nb_actions = 6
@@ -298,7 +298,7 @@ if __name__ == "__main__":
         # agent_type = "olson"
         # model_type = "stargan"
         # ablate_agent = True
-        # agent_latent = 512
+        # agent_latent = 32
         if agent_type == "deepq":
             agent = keras.models.load_model(agent_file)
         elif agent_type == "acer":
@@ -322,24 +322,28 @@ if __name__ == "__main__":
         if model_type == "stargan":
             # Load a StarGAN generator
             generator = Generator(c_dim=nb_actions, channels=3).cuda()
-            generator.load_state_dict(torch.load("../res/models/SpaceInvaders_Abl/models/200000-G.ckpt",
+            generator.load_state_dict(torch.load("../res/models/PacMan_FearGhost2_3/models/200000-G.ckpt",
                                                  map_location=lambda storage, loc: storage))
 
             # Evaluate StarGAN
             cm, df = evaluator.evaluate_stargan(generator)
-            evaluator.save_results("../res/results/Space_Invaders_Abl")
+            evaluator.save_results("../res/results/PacMan_FearGhost2_3")
 
         if model_type == "olson":
             # Load all relevant models that are necessary for the CF generation of Olson et al. via load_olson_models()
+            model_name = "PacMan_FearGhost2_3_Olson"
             olson_agent, olson_encoder, olson_generator, olson_Q, olson_P = load_olson_models(
                 "../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3.pt",
-                "../res/models/PacMan_FearGhost2_3_Olson/enc39",
-                "../res/models/PacMan_FearGhost2_3_Olson/gen39",
-                "../res/models/PacMan_FearGhost2_3_Olson_wae/Q",
-                "../res/models/PacMan_FearGhost2_3_Olson_wae/P",
+                "../res/models/" + model_name + "/enc39",
+                "../res/models/" + model_name + "/gen39",
+                "../res/models/" + model_name + "_wae/Q",
+                "../res/models/" + model_name + "_wae/P",
                 action_size=nb_actions,
                 agent_latent=agent_latent,
                 pac_man=pacman)
+            # Evaluate Olson et al.
+            cm_olson, df_olson = evaluator.evaluate_olson(olson_agent, olson_encoder, olson_generator, olson_Q, olson_P)
+            evaluator.save_results("../res/results/" + model_name)
 
     # To reload old evaluation results
     else:

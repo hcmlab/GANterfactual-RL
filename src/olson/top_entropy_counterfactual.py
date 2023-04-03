@@ -1,6 +1,6 @@
 import argparse
 
-from tensorflow import keras
+import keras
 import matplotlib
 import numpy as np
 import torch

@@ -6,7 +6,7 @@ import tensorflow as tf
 import torch
 import torch.nn.functional as F
 from PIL import Image
-from tensorflow import keras
+import keras
 from torch.autograd import Variable
 
 import src.olson.model as olson_model

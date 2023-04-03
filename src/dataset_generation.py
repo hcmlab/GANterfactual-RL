@@ -5,7 +5,7 @@ import shutil
 import numpy as np
 import torch
 from PIL import Image, ImageOps
-from tensorflow import keras
+import keras
 
 import src.olson.model as olson_model
 from src.atari_wrapper import AtariWrapper

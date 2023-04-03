@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
-from tensorflow.python.estimator import keras
+import keras
 from torchvision.utils import save_image
 
 from src.atari_wrapper import AtariWrapper

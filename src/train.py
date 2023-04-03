@@ -59,5 +59,4 @@ def train_star_gan(dataset, name, image_size=176, image_channels=3, c_dim=5, bat
 
 if __name__ == "__main__":
     train_star_gan("SpaceInvaders_Abl", "SpaceInvaders_Abl", image_size=160, image_channels=3, c_dim=6,
-                   batch_size=16, lambda_counter=1, agent_file="abl_agent.tar",
-                   counter_mode="raw", agent_type="olson", ablate_agent=True)
+                   batch_size=16, agent_file=None)

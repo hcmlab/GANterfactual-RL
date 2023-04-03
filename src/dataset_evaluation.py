@@ -1,5 +1,4 @@
 import os
-from tkinter import Image
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl

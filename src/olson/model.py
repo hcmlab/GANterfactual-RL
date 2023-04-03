@@ -1,7 +1,7 @@
 # DCGAN-like generator and discriminator
 import numpy as np
 import torch
-from tensorflow import keras
+import keras
 from torch import nn
 import torch.nn.functional as F
 from torch.autograd import Variable

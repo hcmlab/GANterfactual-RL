@@ -1,30 +1,30 @@
 # GANterfactual-RL: Understanding Reinforcement Learning Agents' Strategies through Visual Counterfactual Explanations
 
-This repository contains the official source code for the paper *GANterfactual-RL: Understanding Reinforcement Learning Agents' Strategies through Visual Counterfactual Explanations*.
+This repository contains the official source code for the AAMAS 2023 paper [GANterfactual-RL: Understanding Reinforcement Learning Agents' Strategies through Visual Counterfactual Explanations](https://arxiv.org/abs/2302.12689).
 This Readme gives an overview on how to install the requirements and use the code.
 
 ## Installation
 
-We used an anaconda environment with python 3.7. 
-In order to run Pytorch and Tensorflow/Keras on a GPU, install cuDNN 7.6.4 and pytorch with CUDA 10.1:
-```
-conda install pytorch==1.7.1 torchvision==0.8.2 torchaudio==0.7.2 cudatoolkit=10.1 -c pytorch
-conda install cudnn==7.6.4
-```
+We used python 3.7 with cuDNN 7.6.4 and CUDA 10.1.
 
-Then install requirements from requirements.txt:
+First, install requirements from requirements.txt:
 ```
 pip install -r requirements.txt
 ```
+Then you can install the pytorch version we used as follows:
+```
+pip install torch==1.7.1 torchvision==0.8.2 torchaudio==0.7.2 --index-url https://download.pytorch.org/whl/cu101
+```
 
-The following error might occur due to issues with atari_py:
+To properly install baselines you have to use their git repository, not pip. We used the commit *ea25b9e8b234e6ee1bca43083f8f3cf974143998*
 ```
-OSError: [WinError 126] The specified module could not be found
+git clone https://github.com/openai/baselines.git
+cd baselines
+pip install -e .
 ```
 
-In order to fix this, uninstall atari_py and install the following version:
+Finally, we only tested on windows 10. To get atari-py to run on windows, we used the following repository with release 1.2.2:
 ```
-pip uninstall atari_py
 pip install --no-index -f https://github.com/Kojoley/atari-py/releases atari_py
 ```
 
@@ -69,8 +69,7 @@ For example, the following settings of [src/train.py](../main/src/train.py) were
 ```python
 if __name__ == "__main__":
   train_star_gan("PacMan_Ingame_Unique", "PacMan_Ingame", image_size=176, image_channels=3, c_dim=5,
-                 batch_size=16, lambda_counter=1, agent_file="Pacman_Ingame_cropped_5actions_5M.h5",
-                 counter_mode="raw")
+                 batch_size=16, agent_file= None)
 ```
 
 ### Training the CSE models

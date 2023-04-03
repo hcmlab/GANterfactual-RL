@@ -5,7 +5,7 @@ from os.path import isfile
 import numpy as np
 import pandas as pd
 from PIL import Image
-from tensorflow import keras
+import keras
 import torch
 
 import src.olson.model as olson_model
@@ -254,7 +254,7 @@ if __name__ == "__main__":
 
     # The Fear Ghost agent uses a pytorch version of the agent for the Olson CF generation
     # but the baselines model for generating HIGHLIGHTS. Thats why we have to differentiate between the agents
-    # olson_agent_path = "../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3.pt",
+    # olson_agent_path = "../res/agents/ACER_PacMan_FearGhost2_cropped_5actions_40M_3.pt"
     # olson_agent_path = "../res/agents/Pacman_Ingame_cropped_5actions_5M.h5"
     # olson_agent_path = "../res/agents/Pacman_PowerPill_cropped_5actions_5M.h5"
     # olson_agent_path = "../res/agents/abl_agent.tar"
